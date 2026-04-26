@@ -1,3 +1,4 @@
-google-adk
-python-dotenv
-pydantic
+google-adk>=1.0.0
+google-cloud-aiplatform>=1.91.0
+google-cloud-storage>=2.19.0
+python-dotenv>=1.0.0
