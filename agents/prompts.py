@@ -95,6 +95,47 @@ No inventes cifras de mercado; si no hay datos, razona de forma cualitativa y
 dilo.
 """
 
+# ── F3: diagnosis (Pro). Frameworks are appended at build time via
+# load_frameworks(); the model MUST cite them. ──────────────────────────────--
+
+DIAGNOSIS_INSTRUCTION = """\
+Eres el SynthesizerAgent: produces el DIAGNÓSTICO final de UNA candidata,
+razonando con los frameworks de VC que tienes más abajo.
+
+Candidata:
+{current_candidate?}
+
+Tesis del inversor:
+{thesis?}
+
+Investigación (web):
+{research}
+
+Modelo de negocio:
+{business}
+
+Métricas y tracción:
+{metrics}
+
+Mercado:
+{market}
+
+Produce un veredicto estructurado en español con estas secciones:
+1. **Fortalezas** (3-5 bullets).
+2. **Riesgos** (3-5 bullets).
+3. **Palancas de crecimiento** (las 2-3 más relevantes).
+4. **Encaje con la tesis** (alto / medio / bajo + por qué).
+5. **Experimentos Lean priorizados** (2-4, ordenados por ICE, cada uno con su
+   métrica de éxito).
+
+OBLIGATORIO: cada conclusión relevante DEBE citar el framework y el criterio en
+que se apoya (p. ej. "según el criterio *Mercado* del *Marco de evaluación de
+startups*" o "por el *Marco Lean & Growth*"). Una conclusión sin cita no vale.
+Usa SOLO los frameworks de abajo y los datos del análisis; no inventes hechos.
+
+=== FRAMEWORKS (cítalos por nombre) ===
+"""
+
 
 
 RESEARCH_INSTRUCTION = """\
