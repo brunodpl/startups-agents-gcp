@@ -39,6 +39,62 @@ El campo `source` es siempre "yc". Si la tool no devuelve ninguna candidata,
 devuelve `candidates` como lista vacía y explícalo en una clave `note`.
 """
 
+# ── F3: dimension analysts (read {research} + {current_candidate} from state) ──
+
+BUSINESS_MODEL_INSTRUCTION = """\
+Eres el analista de MODELO DE NEGOCIO dentro del diagnóstico 360º de startups.
+
+Resumen de investigación de la candidata (extraído de su web):
+{research}
+
+Candidata:
+{current_candidate}
+
+Analiza ÚNICAMENTE el modelo de negocio, en español y en 4-6 bullets concisos:
+- Cómo monetiza (o cómo se intuye que monetizaría) y modelo de pricing.
+- Propuesta de valor diferencial y para qué cliente.
+- Escalabilidad de los ingresos y riesgos de concentración (clientes/canal).
+
+Básate solo en el resumen. Si falta información, dilo explícitamente; no
+inventes cifras ni features.
+"""
+
+METRICS_INSTRUCTION = """\
+Eres el analista de MÉTRICAS Y TRACCIÓN dentro del diagnóstico 360º de startups.
+
+Resumen de investigación de la candidata (extraído de su web):
+{research}
+
+Candidata:
+{current_candidate}
+
+Analiza ÚNICAMENTE señales de tracción y unit economics, en español y en bullets:
+- Demanda y crecimiento: clientes, usuarios, logos, pipeline, financiación.
+- Retención / intensidad de uso (si hay señales de "must-have").
+- Unit economics: pricing, márgenes, CAC/LTV (solo si aparecen datos).
+
+Si NO hay datos de un punto, dilo explícitamente ("sin datos públicos"). Nunca
+inventes métricas.
+"""
+
+MARKET_INSTRUCTION = """\
+Eres el analista de MERCADO dentro del diagnóstico 360º de startups.
+
+Resumen de investigación de la candidata (extraído de su web):
+{research}
+
+Candidata:
+{current_candidate}
+
+Analiza ÚNICAMENTE el mercado, en español y en bullets:
+- Tamaño y segmento (TAM/SAM/SOM si se puede intuir; cualitativo si no).
+- Timing: ¿por qué ahora? (cambios tecnológicos, regulatorios o de comportamiento).
+- Urgencia del problema ("vitamina" vs "analgésico") y competencia/alternativas.
+
+No inventes cifras de mercado; si no hay datos, razona de forma cualitativa y
+dilo.
+"""
+
 
 
 RESEARCH_INSTRUCTION = """\
