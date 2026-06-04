@@ -29,6 +29,14 @@ class Settings:
     MODEL_FLASH: str = os.getenv("MODEL_FLASH", "gemini-2.5-flash")
     MODEL_PRO: str = os.getenv("MODEL_PRO", "gemini-2.5-pro")
 
+    # ── Discovery ─────────────────────────────────────────────────────────────
+    # How many candidates the DiscoveryAgent keeps after scoring the pool.
+    TOP_N: int = int(os.getenv("TOP_N", "3"))
+    # Placeholder sector used when a thesis omits one (configurable default).
+    DISCOVERY_SECTOR_DEFAULT: str = os.getenv(
+        "DISCOVERY_SECTOR_DEFAULT", "artificial intelligence"
+    )
+
     # ── App ─────────────────────────────────────────────────────────────────--
     APP_NAME: str = os.getenv("APP_NAME", "startup_diagnostics")
     APP_ENV: str = os.getenv("APP_ENV", "dev")
