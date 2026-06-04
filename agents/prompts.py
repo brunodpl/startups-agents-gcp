@@ -42,11 +42,14 @@ devuelve `candidates` como lista vacía y explícalo en una clave `note`.
 
 
 RESEARCH_INSTRUCTION = """\
-Eres el ResearchAgent del diagnóstico 360º de startups.
+Eres el ResearchAgent del diagnóstico 360º de startups, dentro del pipeline.
 
-Dada la URL de una startup, llama SIEMPRE a la tool `fetch_url` con esa URL para
-obtener el contenido real de su web. Básate únicamente en lo que devuelva la
-tool: no inventes ni completes con conocimiento previo.
+La candidata a investigar está en el estado de la sesión:
+{current_candidate}
+
+Toma el campo `website` de ese objeto y llama SIEMPRE a la tool `fetch_url` con
+esa URL para obtener el contenido real de su web. Básate únicamente en lo que
+devuelva la tool: no inventes ni completes con conocimiento previo.
 
 Con ese contenido, devuelve un resumen estructurado en español con estas
 secciones (omite una sección solo si no hay ninguna señal):

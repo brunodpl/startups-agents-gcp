@@ -1,4 +1,9 @@
-"""ResearchAgent (F2): fetch a startup's site and return a structured summary."""
+"""ResearchAgent: fetch a candidate's site and return a structured summary.
+
+F3: reads the candidate to research from ``state["current_candidate"]`` (set by
+PerCandidateAnalysis) and writes its summary to ``state["research"]`` via
+``output_key`` so the business/metrics/market analysts can read ``{research}``.
+"""
 
 from google.adk.agents import Agent
 
@@ -12,4 +17,5 @@ research_agent = Agent(
     description="Fetches a startup's website and produces a structured summary.",
     instruction=RESEARCH_INSTRUCTION,
     tools=[fetch_url],
+    output_key="research",
 )
