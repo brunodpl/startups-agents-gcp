@@ -19,8 +19,8 @@ citadas** y un **harness de evals** que mide la calidad del diagnóstico.
 
 | Fase | Qué entrega | Estado |
 |------|-------------|--------|
-| **F1** | Scaffold + agente "hello-world" ADK sobre Vertex + **deploy a Cloud Run con URL** | 🟢 en curso |
-| **F2** | `ResearchAgent` + tool de fetch de URL → resumen de la startup | ⚪ pendiente |
+| **F1** | Scaffold + agente "hello-world" ADK sobre Vertex + **deploy a Cloud Run con URL** | ✅ hecho |
+| **F2** | `ResearchAgent` + tool de fetch de URL (Firecrawl) → resumen de la startup | ✅ hecho |
 | **F3** | Diagnóstico multi-agente completo (business / metrics / growth / synth) | ⚪ pendiente |
 | **F4** | Grounding RAG vía Vertex AI Search (Discovery Engine) | ⚪ pendiente |
 | **F5** | Harness de evals (4 niveles) + UI mínima + guion de demo | ⚪ pendiente |
@@ -165,7 +165,9 @@ los fallos concretos.
 5. **(20s)** Enseñar el harness de evals: "no me creáis a mí, miradlo medido —
    4 niveles de evaluación y un dataset de regresión."
 
-> Estado actual (F1): la URL está viva y responde; el pipeline completo llega en F2-F5.
+> Estado actual (F2): la URL está viva y ya hace research real — dada la URL de
+> una startup, la descarga con Firecrawl y devuelve un resumen estructurado. El
+> resto del pipeline (métricas, growth, síntesis, RAG) llega en F3-F5.
 
 ---
 

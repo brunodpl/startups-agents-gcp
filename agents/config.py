@@ -33,3 +33,8 @@ class Settings:
     APP_NAME: str = os.getenv("APP_NAME", "startup_diagnostics")
     APP_ENV: str = os.getenv("APP_ENV", "dev")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
+    # ── External tools ────────────────────────────────────────────────────────
+    # Firecrawl API key for the fetch_url tool (F2). SECRET → keep in .env only,
+    # and pass it to Cloud Run at deploy time (env var / Secret Manager).
+    FIRECRAWL_API_KEY: str = os.getenv("FIRECRAWL_API_KEY", "")
