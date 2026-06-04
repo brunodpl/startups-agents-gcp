@@ -21,13 +21,14 @@ _(se actualiza con cada fase; scale-to-zero → el primer mensaje arranca en ~5-
 | Fase | Qué entrega | Estado |
 |------|-------------|--------|
 | **F1** | Scaffold + agente "hello-world" ADK sobre Vertex + **deploy a Cloud Run con URL** | ✅ hecho |
-| **F2** | **Discovery**: agente de sourcing con 1 fuente API gratis → shortlist cruda | 🟢 siguiente |
-| **F3** | **Analysis** (research/business/metrics/market) + **Diagnosis** (frameworks en contexto + citación) | ⚪ pendiente |
-| **F4** | **Presentation** (informe rankeado) + 2ª fuente en Discovery | ⚪ pendiente |
-| **F5** | Harness de evals (4 niveles) + README + guion de demo 2 min | ⚪ pendiente |
+| **F2** | **Discovery**: agente de sourcing (YC OSS) → shortlist puntuada vs tesis | ✅ hecho |
+| **F3** | **Analysis** (research/business/metrics/market) + **Diagnosis** (frameworks en contexto + citación) | ✅ hecho |
+| **F4** | **Presentation** (informe rankeado) + 2ª fuente (GitHub) con dedupe por dominio | ✅ hecho |
+| **F5** | Harness de evals (4 niveles + LLM-judge) + dataset de regresión + docs | ✅ hecho |
 
-> El `ResearchAgent` + tool `fetch_url` (ya construidos) son un **componente de
-> Analysis (F3)**, no una fase aparte.
+> El `ResearchAgent` + tool `fetch_url` son un **componente de Analysis (F3)**,
+> no una fase aparte: dentro del pipeline leen la candidata de `state` y escriben
+> su resumen en `state["research"]`.
 > Filosofía: **mínimo que funcione, desplegado pronto**. Una URL que funciona >
 > la perfección.
 
@@ -38,7 +39,7 @@ _(se actualiza con cada fase; scale-to-zero → el primer mensaje arranca en ~5-
 ```mermaid
 flowchart TD
     TH([Tesis: sector · stage · geografía · señales]) --> DISC
-    DISC[1· Discovery<br/>sourcing por API pública<br/>normaliza · dedup · puntúa vs tesis] --> SL[(Shortlist · top N)]
+    DISC[1· Discovery<br/>2 fuentes API pública: YC + GitHub<br/>normaliza · dedup por dominio · puntúa vs tesis] --> SL[(Shortlist · top N)]
     SL --> ANA
     subgraph ANA[2· Analysis · en paralelo por candidata]
       RES[ResearchAgent · fetch_url + resumen]
@@ -52,11 +53,13 @@ flowchart TD
     REP --> OUT([Shortlist diagnosticada con citas → URL Cloud Run])
 ```
 
-- **Discovery**: consulta 1-2 fuentes públicas gratis vía API, normaliza, deduplica
-  y puntúa candidatas contra la tesis. Respeta `robots.txt`/ToS, GDPR-aware; **no**
-  scrapea LinkedIn/Crunchbase ni reconstruye una base tipo Harmonic.
-- **Analysis**: por cada candidata del top, agentes en paralelo (research,
-  modelo de negocio, métricas, mercado).
+- **Discovery**: consulta 2 fuentes públicas gratis vía API (YC OSS + GitHub),
+  normaliza, **deduplica por dominio** y puntúa candidatas contra la tesis.
+  Respeta `robots.txt`/ToS, GDPR-aware; **no** scrapea LinkedIn/Crunchbase ni
+  reconstruye una base tipo Harmonic.
+- **Analysis**: un agente custom (`PerCandidateAnalysis`) itera el top N; por
+  cada candidata corre `research` y luego los 3 analistas (business/metrics/
+  market) **en paralelo** (research primero porque los analistas leen `{research}`).
 - **Diagnosis**: `gemini-2.5-pro`, **grounded en los frameworks en contexto**,
   citando de qué framework sale cada conclusión.
 - **Presentation**: informe rankeado (JSON + legible).
@@ -102,19 +105,23 @@ Functions ni App Engine. ❌ No crear proyecto nuevo.
 ```
 startups-agents-gcp/
 ├── agents/                  # paquete ADK desplegable (el "app")
-│   ├── agent.py             # root_agent (crece hasta el pipeline de 4 etapas)
-│   ├── config.py            # Settings: routing Vertex, modelos, keys de fuentes
+│   ├── agent.py             # root_agent = build_pipeline()
+│   ├── pipeline.py          # SequentialAgent + PerCandidateAnalysis (BaseAgent custom)
+│   ├── config.py            # Settings: routing Vertex, modelos, TOP_N, keys
 │   ├── prompts.py           # instrucciones de cada agente
-│   ├── knowledge.py         # (F3) loader: knowledge/*.md → str para el instruction
+│   ├── schemas.py           # pydantic: Thesis · Candidate · Shortlist · Report
+│   ├── knowledge.py         # loader: knowledge/*.md → str para el instruction
 │   ├── requirements.txt     # ⚠️ deps del contenedor Cloud Run (NO el pyproject)
 │   ├── sub_agents/          # discovery · research · business_model · metrics · market · diagnosis · reporting
-│   └── tools/               # fetch_url (Analysis) · tool de la fuente de Discovery (F2)
+│   └── tools/               # fetch_url · yc_source · gh_source · sources (find_candidates + dedupe)
 ├── knowledge/               # frameworks .md inyectados en contexto (no RAG)
 │   ├── evaluation_framework.md
 │   └── lean_growth.md
 ├── evals/                   # F5: harness de 4 niveles · `python -m evals.run`
-│   └── datasets/            # dataset de regresión (3-5 startups conocidas)
-├── tests/                   # pytest (unit)
+│   ├── levels.py            # lógica de los 4 niveles (pura, testeable)
+│   ├── run.py               # captura una corrida + LLM-judge (Vertex)
+│   └── datasets/            # regression.jsonl (4 tesis + criterios esperados)
+├── tests/                   # pytest (unit + wiring)
 ├── docs/architecture.md     # detalle técnico + decisiones
 ├── .env.example
 └── pyproject.toml
@@ -158,14 +165,22 @@ uv run python -m google.adk.cli deploy cloud_run \
 
 ## Harness de evals (el diferenciador) — F5
 
-Calidad **medible** en 4 niveles:
-1. **Paso individual** — ¿cada agente hace bien su parte?
-2. **Trayectoria** — ¿la secuencia de decisiones es correcta de principio a fin?
-3. **Llamada a herramientas** — ¿tool correcta, argumentos correctos?
-4. **Salida final** — ¿el diagnóstico es correcto y cita fuentes reales?
+Calidad **medible** en 4 niveles (una corrida del pipeline, evaluada 4 veces):
+1. **Paso individual** — ¿cada etapa produjo salida no vacía, sin errores?
+2. **Trayectoria** — discovery → research → analistas → synthesizer → reporting.
+3. **Llamada a herramientas** — `find_candidates` se llamó; y la URL de `fetch_url`
+   **viene de una candidata en `state`** (no hardcodeada) → valida el flujo F3.
+4. **Salida final** — el informe **cita frameworks reales** (de `knowledge/`) y
+   cubre los criterios esperados (**LLM-as-judge** sobre Vertex).
 
-Más un **dataset de regresión** (3-5 startups conocidas con criterios esperados) y
-`python -m evals.run` → informe con métricas por nivel y fallos concretos.
+Más un **dataset de regresión** (`evals/datasets/regression.jsonl`: 4 tesis con
+criterios esperados) y `python -m evals.run` → informe por nivel + fallos
+concretos (`--all` para todo el dataset).
+
+```bash
+uv run python -m evals.run          # primera tesis
+uv run python -m evals.run --all    # dataset completo (más lento / más crédito)
+```
 
 ---
 

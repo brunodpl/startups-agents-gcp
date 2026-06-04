@@ -21,27 +21,43 @@ experimentos Lean priorizados, citando los frameworks de evaluación. Sobre
 
 | Etapa | Agente(s) | Modelo | Entrada | Salida | Tools |
 |---|---|---|---|---|---|
-| Discovery | discovery_agent | Flash | tesis | shortlist cruda | fuente API pública (F2) |
+| Discovery | discovery_agent | Flash | tesis | shortlist puntuada (`state["shortlist"]`) | `find_candidates` (YC + GitHub) |
 | Analysis | research / business_model / metrics / market | Flash | candidata | señales por dimensión | `fetch_url` (research) |
 | Diagnosis | synthesizer | **Pro** | análisis + frameworks | juicio estructurado + citas | — |
-| Presentation | reporting | Flash | diagnósticos | informe rankeado | — |
+| Presentation | reporting | Flash | diagnósticos (`state["analyses"]`) | informe rankeado | — |
 
-**Orquestación:** `SequentialAgent` para las 4 etapas; dentro de Analysis, un
-`ParallelAgent` (o fan-out) por candidata y por dimensión. El paso de datos entre
-agentes es vía el **`state` de la sesión ADK** (`output_key` para escribir, y
-`{clave}` en el `instruction` del siguiente para leer).
+**Orquestación** (`agents/pipeline.py`): el root es un `SequentialAgent`
+= `[discovery_agent, PerCandidateAnalysis, reporting_agent]`.
+
+- `PerCandidateAnalysis` es un **`BaseAgent` custom**: parsea `state["shortlist"]`
+  (JSON que dejó Discovery, posiblemente con fences ```), e itera el top N. Por
+  cada candidata fija `state["current_candidate"]` (+ `state["thesis"]`), corre el
+  sub-pipeline de análisis y la síntesis, y **acumula** un diagnóstico por
+  candidata en `state["analyses"]` (lista de dicts, JSON-serializable).
+- El sub-pipeline de análisis es `SequentialAgent([research, ParallelAgent([
+  business, metrics, market])])`: **research primero** (escribe `state["research"]`)
+  y luego los 3 analistas **en paralelo**, porque leen `{research}`. (El plan
+  original los ponía a los 4 en un solo `ParallelAgent`; se corrigió por esta
+  dependencia de datos. La síntesis corre **por candidata**, no una sola vez.)
+
+El paso de datos es vía el **`state` de la sesión ADK** (`output_key` para
+escribir; `{clave}` en el `instruction` del siguiente para leer). ⚠️ ADK sólo
+sustituye `{identificador}` válidos contra `state`; los ejemplos JSON con claves
+entrecomilladas (`{"name": ...}`) se dejan intactos.
 
 **Por qué Flash + Pro:** Flash (barato/rápido) para sourcing y extracción; Pro
 solo para la síntesis del diagnóstico, donde la calidad del razonamiento importa.
 
 ## 3. Discovery (sourcing real, sin reconstruir Harmonic)
 
-- Input: tesis `{sector, stage, geografía, señales}`.
-- Consulta 1-2 **fuentes públicas con API gratis**, normaliza el esquema,
-  deduplica y **puntúa** cada candidata contra la tesis → shortlist.
+- Input: tesis `{sector, stage, geografía, señales}` (texto del usuario).
+- `find_candidates` consulta **2 fuentes públicas con API gratis** —
+  `yc_source` (YC OSS) + `gh_source` (GitHub) — normaliza al mismo esquema,
+  **interleava** ambas y **deduplica por dominio** (gana YC). El LLM puntúa cada
+  candidata 0-1 vs la tesis y se queda con el top N.
 - **Cumplimiento:** respeta `robots.txt` y ToS; nada de scrapear LinkedIn/Crunchbase;
   GDPR-aware con datos de founders (minimizar/evitar PII).
-- Demo: 1 fuente en F2, 2ª fuente en F4.
+- Demo: YC en F2, GitHub añadida en F4 (con dedupe).
 
 ## 4. Conocimiento EN CONTEXTO (decisión cerrada — no RAG)
 
@@ -85,13 +101,21 @@ contenedor Cloud Run (Linux).
 
 ## 7. Harness de evals (F5)
 
-1. **Paso individual** — aísla cada agente: ¿salida correcta dado un input fijo?
-2. **Trayectoria** — la secuencia completa de decisiones de principio a fin.
-3. **Llamada a herramientas** — tool correcta + argumentos correctos.
-4. **Salida final** — diagnóstico correcto y **citas de frameworks reales**.
+Una sola corrida del pipeline (`RunCapture`: authors + tool_calls + state) se
+evalúa en 4 niveles (`evals/levels.py`, funciones puras → testeables offline):
 
-Dataset de regresión (3-5 startups conocidas con criterios esperados) en
-`evals/datasets/`; `python -m evals.run` → informe por nivel + fallos.
+1. **Paso individual** — cada etapa produjo salida no vacía (`shortlist`,
+   `analyses[*].{research,business,metrics,market,diagnosis}`, `report`), sin errores.
+2. **Trayectoria** — orden discovery → research → analistas → synthesizer → reporting.
+3. **Llamada a herramientas** — `find_candidates` se llamó con `sector`; y cada
+   URL de `fetch_url` **pertenece al dominio de una candidata en `state`** (no
+   hardcodeada) → valida que research lee la web desde el estado (flujo F3).
+4. **Salida final** — el informe cita frameworks reales de `knowledge/` y un
+   **LLM-judge** (Flash sobre Vertex) puntúa la cobertura de criterios esperados
+   (umbral 70 %).
+
+Dataset de regresión (`evals/datasets/regression.jsonl`: 4 tesis con criterios
+esperados); `python -m evals.run [--all]` → informe por nivel + fallos.
 
 ## 8. Logging / observabilidad
 
