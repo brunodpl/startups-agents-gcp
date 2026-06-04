@@ -183,6 +183,9 @@ Más un **dataset de regresión** (3-5 startups conocidas con criterios esperado
 
 ## Notas de proyecto
 
+- **El sistema es para Tales Venture**: la tesis, las fuentes y los frameworks son
+  *inputs configurables del cliente*, no asunciones. Preguntas de descubrimiento y
+  dónde enchufa cada respuesta: [docs/preguntas-tales-venture.md](docs/preguntas-tales-venture.md).
 - Prototipo sobre el proyecto GCP **personal** del autor. Si avanza a startup real,
   la producción se mueve a la cuenta cloud de esa startup.
 - Región EU por GDPR; Discovery respeta robots.txt/ToS y es consciente de datos de founders.
