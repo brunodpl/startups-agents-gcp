@@ -9,3 +9,15 @@ build/
 *.egg-info/
 tmp/
 .DS_Store
+
+# ADK local caches
+.adk/
+**/.adk/
+
+# Claude Code tooling (skills, local settings) — not part of the project
+.claude/
+
+# Logs / coverage
+*.log
+.coverage
+htmlcov/
