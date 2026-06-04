@@ -1,49 +1,32 @@
-# aiwaf-agents-gcp
+## OBJETIVO
 
-Draft ADK agent that normalises inbound WhatsApp/email messages
-and suggests a routing target for invoice-related documents.
+Un sistema multi-agente que, dada la **URL (+ datos básicos) de una startup**, produce un **diagnóstico 360º estructurado**: modelo de negocio, lectura de métricas, palancas de crecimiento ocultas y experimentos Lean priorizados. Desplegado en **Cloud Run** y con un **mini-harness de evals**.
 
-Database integration (Supabase `agent_ops`) is intentionally left
-for the next iteration — this version is fully runnable with mock tools.
+## STACK OBLIGATORIO
 
-## Requirements
+- **Google ADK** (`google-adk`) para la orquestación de agentes
+- **Vertex AI (Gemini 2.5 Flash/Pro)** como LLM — vía Vertex, NUNCA free tier
+- **Vertex AI Search (Discovery Engine)** para el RAG / grounding
+- **Cloud Run** para el despliegue (`adk deploy cloud_run`)
+- **Cloud Storage** como landing y fuente para indexar el datastore
+- Python 3.12; FastAPI solo si hace falta un endpoint custom (ADK ya expone el suyo)
+- **pytest** para los evals
 
-- Python 3.10+
-- A Google API key with Gemini access
+## ARQUITECTURA (multi-agente, mínima)
 
-## Setup
+`Orchestrator` (SequentialAgent de ADK):
+1. **ResearchAgent** (`LlmAgent` + tool de fetch de URL): extrae info del sitio/datos públicos de la startup.
+2. **BusinessModelAgent**: propuesta de valor, segmento, monetización.
+3. **MetricsAgent**: lee/estima métricas clave y señales de unit economics.
+4. **GrowthLeversAgent**: palancas de crecimiento ocultas, **grounded vía Vertex AI Search** sobre un corpus de frameworks de growth/Lean.
+5. **SynthesizerAgent** (gemini-2.5-pro): informe 360º final estructurado.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env and fill at least GOOGLE_API_KEY
-```
+RAG: indexa un corpus pequeño (Lean Startup, playbooks de growth, notas de benchmark) en Cloud Storage → Discovery Engine; consúltalo con `VertexAiSearchTool`.
 
-## Run
+## FASES (rápido → desplegado pronto)
 
-```bash
-# Direct Python runner (draft prompt hardcoded)
-python -m agents.invoice_router.runner
-
-# ADK CLI — interactive terminal
-adk run agents/invoice_router
-
-# ADK web UI — browser dev playground
-adk web
-```
-
-## Structure
-
-```
-agents/invoice_router/
-├── agent.py          # root_agent definition
-├── config.py         # all keys and settings in one place
-├── prompts.py        # agent instruction
-├── runner.py         # local test runner
-└── tools/
-    ├── channels.py   # normalise incoming message
-    ├── classify.py   # keyword-based document intent detection
-    └── route.py      # suggest delivery target
-```
+- **F1** — scaffold + un agente "hello world" de ADK sobre Vertex + **desplegar a Cloud Run y obtener una URL que funcione PRIMERO**. (Validar el pipeline de despliegue antes de meter lógica.)
+- **F2** — ResearchAgent + tool de fetch de URL → devuelve un resumen de la startup.
+- **F3** — diagnóstico multi-agente completo (business / metrics / growth / synth).
+- **F4** — grounding RAG vía Vertex AI Search.
+- **F5** — harness de evals + UI mínima opcional + README + guion de demo de 2 min.
