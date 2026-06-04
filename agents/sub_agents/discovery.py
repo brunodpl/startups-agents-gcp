@@ -9,7 +9,7 @@ from google.adk.agents import Agent
 
 from ..config import Settings
 from ..prompts import DISCOVERY_INSTRUCTION
-from ..tools.yc_source import search_startups
+from ..tools.sources import find_candidates
 
 # TOP_N is injected with an f-string (not str.format) so the JSON braces inside
 # DISCOVERY_INSTRUCTION are left untouched.
@@ -22,6 +22,6 @@ discovery_agent = Agent(
         + f"\nDevuelve EXACTAMENTE las {Settings.TOP_N} mejores candidatas "
         "(o menos si la tool devuelve menos)."
     ),
-    tools=[search_startups],
+    tools=[find_candidates],
     output_key="shortlist",
 )

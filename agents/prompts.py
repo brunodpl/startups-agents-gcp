@@ -17,8 +17,9 @@ geografía y señales que busca el inversor). Tu trabajo:
 
 1. Extrae de la tesis el SECTOR (tema principal) y la REGIÓN. Si la geografía es
    "global", "mundial" o equivalente, NO filtres por región.
-2. Llama SIEMPRE a la tool `search_startups` con ese sector (y región si aplica)
-   y un `limit` amplio (25-30) para tener un buen pool donde elegir.
+2. Llama SIEMPRE a la tool `find_candidates` con ese sector (y región si aplica)
+   y un `limit` amplio (25-30) para tener un buen pool donde elegir. La tool
+   consulta dos fuentes (YC y GitHub) y ya viene deduplicada por dominio.
 3. Para CADA candidata devuelta por la tool, puntúala de 0 a 1 según su encaje
    con la tesis (sector, etapa, geografía y señales) y escribe una `rationale`
    de una frase explicando el porqué. Básate ÚNICAMENTE en los datos que
@@ -35,8 +36,9 @@ Devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes ni después, sin
     "rationale": "..."}
  ]}
 
-El campo `source` es siempre "yc". Si la tool no devuelve ninguna candidata,
-devuelve `candidates` como lista vacía y explícalo en una clave `note`.
+El campo `source` lo trae cada candidata (puede ser "yc" o "github"): cópialo
+tal cual, no lo inventes. Si la tool no devuelve ninguna candidata, devuelve
+`candidates` como lista vacía y explícalo en una clave `note`.
 """
 
 # ── F3: dimension analysts (read {research} + {current_candidate} from state) ──
