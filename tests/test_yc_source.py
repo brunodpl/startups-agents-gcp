@@ -8,7 +8,24 @@ Run: ``uv run python -m pytest tests/test_yc_source.py -q``
 
 import httpx
 
-from agents.tools.yc_source import normalize_company, search_startups
+from agents.tools.yc_source import (
+    _candidate_slugs,
+    normalize_company,
+    search_startups,
+)
+
+
+def test_candidate_slugs_prefers_full_then_bigrams_then_words() -> None:
+    slugs = _candidate_slugs("AI developer tools")
+    assert slugs[0] == "ai-developer-tools"  # full phrase first
+    assert "developer-tools" in slugs  # bigram (a real YC tag)
+    assert "developer" in slugs and "tools" in slugs  # single words last
+
+
+def test_candidate_slugs_skips_short_stopwords() -> None:
+    # 'para' (4 chars) stays, but 'de' (2) would be dropped.
+    slugs = _candidate_slugs("inteligencia artificial para developer tools")
+    assert "developer-tools" in slugs
 
 # Mirrors the real YC OSS company shape (snake_case fields).
 RAW = {

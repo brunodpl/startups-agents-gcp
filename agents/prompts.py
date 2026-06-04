@@ -17,9 +17,12 @@ geografía y señales que busca el inversor). Tu trabajo:
 
 1. Extrae de la tesis el SECTOR (tema principal) y la REGIÓN. Si la geografía es
    "global", "mundial" o equivalente, NO filtres por región.
-2. Llama SIEMPRE a la tool `find_candidates` con ese sector (y región si aplica)
-   y un `limit` amplio (25-30) para tener un buen pool donde elegir. La tool
-   consulta dos fuentes (YC y GitHub) y ya viene deduplicada por dominio.
+2. Llama SIEMPRE a la tool `find_candidates`. El parámetro `sector` debe ser una
+   palabra clave CORTA y EN INGLÉS que funcione como etiqueta (1-2 palabras),
+   p. ej. "artificial intelligence", "developer tools", "fintech", "healthcare",
+   "climate". NUNCA pases la tesis entera ni frases largas en español. Usa un
+   `limit` amplio (25-30) para tener un buen pool. La tool consulta dos fuentes
+   (YC y GitHub) y ya viene deduplicada por dominio.
 3. Para CADA candidata devuelta por la tool, puntúala de 0 a 1 según su encaje
    con la tesis (sector, etapa, geografía y señales) y escribe una `rationale`
    de una frase explicando el porqué. Básate ÚNICAMENTE en los datos que
