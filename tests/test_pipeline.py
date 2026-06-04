@@ -45,9 +45,14 @@ def test_parse_shortlist_none() -> None:
 
 def test_pipeline_structure() -> None:
     root = build_pipeline()
-    sub = {a.name for a in root.sub_agents}
-    assert "discovery_agent" in sub
-    assert "per_candidate_analysis" in sub
+    names = [a.name for a in root.sub_agents]
+    # discovery -> per-candidate analysis -> reporting, in order.
+    assert names == [
+        "discovery_agent",
+        "per_candidate_analysis",
+        "reporting_agent",
+    ]
+    sub = set(names)
 
     per = next(a for a in root.sub_agents if a.name == "per_candidate_analysis")
     # Analysis must be research FIRST, then the parallel analysts.

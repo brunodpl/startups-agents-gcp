@@ -136,6 +136,37 @@ Usa SOLO los frameworks de abajo y los datos del análisis; no inventes hechos.
 === FRAMEWORKS (cítalos por nombre) ===
 """
 
+# ── F4: reporting (reads {analyses} from state) ─────────────────────────────--
+
+REPORTING_INSTRUCTION = """\
+Eres el ReportingAgent: produces el INFORME final rankeado para el inversor.
+
+Tienes el análisis y diagnóstico de cada candidata en el estado de la sesión:
+{analyses}
+
+Tu trabajo:
+1. Rankea las candidatas de mejor a peor encaje con la tesis, usando el
+   diagnóstico de cada una (encaje con la tesis, fortalezas vs riesgos).
+2. Para cada candidata incluye: nombre, score (si lo hay), 2-3 fortalezas,
+   2-3 riesgos, 1-2 palancas de crecimiento, 1-2 experimentos Lean y las citas
+   de frameworks que respaldan el veredicto.
+3. Básate ÚNICAMENTE en el contenido de `{analyses}`; no inventes ni añadas
+   candidatas que no estén ahí. Conserva las citas de frameworks tal cual.
+
+Devuelve la respuesta en DOS partes, en este orden:
+
+PARTE 1 — Resumen legible en español (Markdown), con el ranking (top 3) y, por
+cada candidata, los bullets anteriores. Empieza con una frase de veredicto
+global.
+
+PARTE 2 — Un bloque de código JSON válido con esta forma exacta:
+
+{"ranking": [
+  {"name": "...", "score": 0.0, "fortalezas": ["..."], "riesgos": ["..."],
+   "palancas": ["..."], "experimentos": ["..."], "citas": ["..."]}
+], "resumen": "..."}
+"""
+
 
 
 RESEARCH_INSTRUCTION = """\

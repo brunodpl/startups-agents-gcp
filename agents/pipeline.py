@@ -2,7 +2,7 @@
 
 Top level is a SequentialAgent:
 
-    discovery  ->  PerCandidateAnalysis  ->  (reporting, added in F4)
+    discovery  ->  PerCandidateAnalysis  ->  reporting
 
 ``PerCandidateAnalysis`` is a custom BaseAgent that loops over the shortlist
 Discovery produced and, for each candidate, runs:
@@ -37,6 +37,7 @@ from .sub_agents.diagnosis import synthesizer_agent
 from .sub_agents.discovery import discovery_agent
 from .sub_agents.market import market_agent
 from .sub_agents.metrics import metrics_agent
+from .sub_agents.reporting import reporting_agent
 from .sub_agents.research import research_agent
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ def build_pipeline() -> SequentialAgent:
     )
     _PIPELINE = SequentialAgent(
         name="startup_diagnostics_pipeline",
-        description="Thesis -> scored shortlist -> per-candidate diagnosis.",
-        sub_agents=[discovery_agent, per_candidate],
+        description="Thesis -> scored shortlist -> per-candidate diagnosis -> report.",
+        sub_agents=[discovery_agent, per_candidate, reporting_agent],
     )
     return _PIPELINE

@@ -45,3 +45,22 @@ class Shortlist(BaseModel):
 
     thesis: Thesis
     candidates: list[Candidate] = Field(default_factory=list)
+
+
+class ReportItem(BaseModel):
+    """One candidate's entry in the final ranked report (F4)."""
+
+    name: str
+    score: float | None = None
+    fortalezas: list[str] = Field(default_factory=list)
+    riesgos: list[str] = Field(default_factory=list)
+    palancas: list[str] = Field(default_factory=list)
+    experimentos: list[str] = Field(default_factory=list)
+    citas: list[str] = Field(default_factory=list)
+
+
+class Report(BaseModel):
+    """The final ranked report produced by the ReportingAgent (F4)."""
+
+    ranking: list[ReportItem] = Field(default_factory=list)
+    resumen: str | None = None

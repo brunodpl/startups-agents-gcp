@@ -3,7 +3,7 @@
 Run: ``uv run python -m pytest tests/test_schemas.py -q``
 """
 
-from agents.schemas import Candidate, Shortlist, Thesis
+from agents.schemas import Candidate, Report, ReportItem, Shortlist, Thesis
 
 
 def test_thesis_minimal() -> None:
@@ -40,3 +40,11 @@ def test_shortlist_holds_thesis_and_candidates() -> None:
     sl = Shortlist(thesis=t, candidates=[c])
     assert sl.thesis.sector == "AI"
     assert len(sl.candidates) == 1
+
+
+def test_report_minimal() -> None:
+    item = ReportItem(name="X", score=0.8, fortalezas=["f"], citas=["Marco X"])
+    r = Report(ranking=[item], resumen="ok")
+    assert r.ranking[0].name == "X"
+    assert r.ranking[0].riesgos == []  # default empty list
+    assert r.resumen == "ok"
