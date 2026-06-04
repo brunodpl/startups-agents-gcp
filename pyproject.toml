@@ -1,9 +1,9 @@
 [project]
-name = "aiwaf-agents-gcp"
+name = "startups-agents-gcp"
 version = "0.1.0"
-description = "Multi-tenant AI backoffice agents for Spanish gestorias"
+description = "Multi-agent 360º startup diagnosis demo on Google ADK + Vertex AI"
 authors = [
-    {name = "Your Name", email = "your@email.com"},
+    {name = "Bruno", email = "brunoisdpl@gmail.com"},
 ]
 dependencies = [
     "google-adk>=1.15.0,<2.0.0",
@@ -53,7 +53,7 @@ select = [
 ignore = ["E501", "C901", "B006"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["agents"]
+known-first-party = ["agents", "evals", "rag"]
 
 [tool.ty]
 python-version = "3.10"
@@ -92,16 +92,16 @@ asyncio_default_fixture_loop_scope = "function"
 packages = ["agents"]
 
 [tool.agents-cli]
-name = "aiwaf-agents-gcp"
-description = "Multi-tenant AI backoffice agents for Spanish gestorias"
-base_template = "local_aiwaf-agents-gcp"
+name = "startups-agents-gcp"
+description = "Multi-agent 360º startup diagnosis demo on Google ADK + Vertex AI"
+base_template = "local_startups-agents-gcp"
 agent_directory = "agents"
 
 generated_at = "2026-05-04T21:26:20.242829+00:00"
 acli_version = "0.1.1"
 
 [tool.agents-cli.create_params]
-deployment_target = "agent_runtime"
+deployment_target = "cloud_run"
 session_type = "none"
 cicd_runner = "skip"
 include_data_ingestion = false
