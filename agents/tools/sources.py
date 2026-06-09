@@ -1,25 +1,28 @@
-"""Unified discovery source (F4): query YC + GitHub and dedupe by domain.
+"""Unified discovery source: query grounding + YC + GitHub and dedupe by domain.
 
 The DiscoveryAgent calls ``find_candidates`` (one tool) so deduplication is
-deterministic instead of relying on the LLM to spot duplicates across two
-separate tool calls.
+deterministic instead of relying on the LLM to spot duplicates across separate
+tool calls. Three sources are combined:
+
+* ``grounded`` — Gemini + Google Search via Vertex: REAL, region-relevant
+  startups (P0.2). Listed first so it wins domain conflicts.
+* ``yc``       — Y Combinator OSS directory.
+* ``github``   — open-source projects by topic.
 """
 
 from itertools import zip_longest
 from urllib.parse import urlparse
 
 from .gh_source import search_github_projects
+from .grounded_source import search_grounded
 from .yc_source import search_startups
 
 
-def _interleave(a: list[dict], b: list[dict]) -> list[dict]:
-    """Round-robin two lists so both sources survive a later cap."""
+def _interleave_all(lists: list[list[dict]]) -> list[dict]:
+    """Round-robin several lists so every source survives a later cap."""
     out: list[dict] = []
-    for x, y in zip_longest(a, b):
-        if x is not None:
-            out.append(x)
-        if y is not None:
-            out.append(y)
+    for row in zip_longest(*lists):
+        out.extend(x for x in row if x is not None)
     return out
 
 
@@ -51,26 +54,38 @@ def dedupe_by_domain(candidates: list[dict]) -> list[dict]:
     return out
 
 
+def _region_matches(candidate: dict, region: str) -> bool:
+    """True if any of the candidate's regions contains ``region`` (substring, ci)."""
+    region_l = region.lower()
+    return any(region_l in (r or "").lower() for r in candidate.get("regions") or [])
+
+
 def find_candidates(
     sector: str, region: str | None = None, limit: int = 20
 ) -> list[dict]:
-    """Busca startups candidatas en DOS fuentes (YC y GitHub) y deduplica.
+    """Busca startups candidatas en TRES fuentes y deduplica por dominio.
 
-    Combina la API pública de YC (Y Combinator) y la de GitHub, etiqueta cada
-    candidata con su `source` ("yc" o "github") y elimina duplicados por dominio
-    web (gana la primera aparición, que es YC).
+    Combina (1) grounding con Google Search vía Vertex —startups reales y
+    regionalmente relevantes—, (2) la API pública de YC y (3) la de GitHub.
+    Etiqueta cada candidata con su `source` ("grounded" | "yc" | "github"),
+    deduplica por dominio web (gana la primera aparición → grounded) y, si hay
+    región, sube las candidatas cuyo `regions` casa con ella.
 
     Args:
         sector: Sector o tema a buscar (p. ej. "artificial intelligence").
-        region: Región para filtrar la fuente YC (substring). None = sin filtro.
+        region: Región objetivo (substring). None = sin filtro / sin geo-rerank.
         limit: Número máximo de candidatas a devolver tras deduplicar.
 
     Returns:
-        Lista de dicts con las claves {name, website, one_liner, industries,
-        regions, stage, source} (la fuente YC añade también `batch`).
+        Lista de dicts {name, website, one_liner, industries, regions, stage,
+        source} (la fuente YC añade también `batch`).
     """
+    grounded = search_grounded(sector, region, limit)
     yc = [{**c, "source": "yc"} for c in search_startups(sector, region, limit)]
     gh = search_github_projects(sector, limit)
-    # Interleave so a small `limit` still draws from both sources; dedupe keeps
-    # the first occurrence (YC wins on domain conflicts).
-    return dedupe_by_domain(_interleave(yc, gh))[:limit]
+    # Grounded first so it wins domain conflicts (most relevant + regional).
+    merged = dedupe_by_domain(_interleave_all([grounded, yc, gh]))
+    if region:
+        # Stable sort: region-matched candidates rank ahead of global ones.
+        merged = sorted(merged, key=lambda c: 0 if _region_matches(c, region) else 1)
+    return merged[:limit]

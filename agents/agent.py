@@ -11,7 +11,12 @@ import os
 # Cloud Run without a .env file. See the `consuming-gcp-credits` skill.
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "your-gcp-project")
-os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "europe-west1")
+os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")  # Gemini 3 not in europe-west1
+
+from .observability import init_cloud_logging
+
+# Route logs to Cloud Logging on Cloud Run (no-op locally; never raises).
+init_cloud_logging()
 
 from .pipeline import build_pipeline  # noqa: E402
 

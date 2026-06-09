@@ -54,6 +54,7 @@ def test_dedupe_by_domain_keeps_first() -> None:
 
 
 def test_find_candidates_merges_and_dedupes(monkeypatch) -> None:
+    monkeypatch.setattr(sources, "search_grounded", lambda *a, **k: [])
     monkeypatch.setattr(
         sources,
         "search_startups",
@@ -77,3 +78,40 @@ def test_find_candidates_merges_and_dedupes(monkeypatch) -> None:
     assert {"YCOnly", "GHOnly"} <= set(names)
     yc_entry = next(c for c in out if c["name"] == "Shared")
     assert yc_entry["source"] == "yc"
+
+
+def test_find_candidates_grounded_wins_and_geo_ranks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sources,
+        "search_grounded",
+        lambda *a, **k: [
+            {"name": "GroundedShared", "website": "https://shared.com",
+             "regions": ["Galicia"], "source": "grounded"},
+            {"name": "GroundedGalicia", "website": "https://g2.com",
+             "regions": ["Galicia, Spain"], "source": "grounded"},
+        ],
+    )
+    monkeypatch.setattr(
+        sources,
+        "search_startups",
+        lambda *a, **k: [
+            {"name": "YCShared", "website": "https://www.shared.com"},
+            {"name": "YCGlobal", "website": "https://yc-global.com",
+             "regions": ["United States"]},
+        ],
+    )
+    monkeypatch.setattr(
+        sources,
+        "search_github_projects",
+        lambda *a, **k: [
+            {"name": "GHGlobal", "website": "https://gh.com", "source": "github"},
+        ],
+    )
+    out = sources.find_candidates("ai", region="Galicia", limit=10)
+    names = [c["name"] for c in out]
+    # Grounded wins the shared.com domain conflict over YC.
+    assert "GroundedShared" in names and "YCShared" not in names
+    # Region-matched candidates rank ahead of global ones.
+    galicia = [n for n in names if n in {"GroundedShared", "GroundedGalicia"}]
+    globals_ = [n for n in names if n in {"YCGlobal", "GHGlobal"}]
+    assert names.index(galicia[-1]) < names.index(globals_[0])

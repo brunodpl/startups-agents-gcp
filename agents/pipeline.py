@@ -25,13 +25,15 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from google.adk.agents import BaseAgent, ParallelAgent, SequentialAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event, EventActions
+from pydantic import ValidationError
 
 from .config import Settings
+from .schemas import Shortlist
 from .sub_agents.business_model import business_model_agent
 from .sub_agents.diagnosis import synthesizer_agent
 from .sub_agents.discovery import discovery_agent
@@ -75,7 +77,40 @@ def parse_shortlist(raw: object) -> tuple[dict | None, list[dict]]:
         return None, []
     if isinstance(data, list):
         return None, data
-    return data.get("thesis"), data.get("candidates") or []
+    # Enforce the schema when the data is complete; fall back tolerantly to the
+    # raw dicts otherwise (the model may emit a partial thesis on some runs).
+    try:
+        sl = Shortlist.model_validate(data)
+        return sl.thesis.model_dump(), [c.model_dump() for c in sl.candidates]
+    except ValidationError as e:
+        logger.warning("Shortlist failed schema validation, using raw dicts: %s", e)
+        return data.get("thesis"), data.get("candidates") or []
+
+
+# Markers meaning the research step produced no usable data: the RESEARCH_STATUS
+# sentinel the ResearchAgent emits, plus the literal error strings fetch_url
+# returns (in case they pass through verbatim).
+_FAIL_MARKERS = (
+    "research_status: sin_datos",
+    "no devolvió texto legible",
+    "error al descargar",
+    "firecrawl_api_key no está configurada",
+    "datos insuficientes",
+)
+
+
+def _research_failed(research: object) -> bool:
+    """True if research is empty or signals a fetch failure (404/error/no data).
+
+    Guards the pipeline so a candidate with no real data does NOT receive a
+    confident, fabricated diagnosis.
+    """
+    if not research or not str(research).strip():
+        return True
+    text = str(research).strip().lower()
+    if text.startswith("error"):
+        return True
+    return any(m in text for m in _FAIL_MARKERS)
 
 
 class PerCandidateAnalysis(BaseAgent):
@@ -108,18 +143,47 @@ class PerCandidateAnalysis(BaseAgent):
         candidates = candidates[: self.top_n]
         logger.info("PerCandidateAnalysis: %d candidate(s)", len(candidates))
 
+        # analysis_agent = Sequential(research, ParallelAgent(analysts)); split
+        # the two stages so we can gate the analysts + synthesizer on research
+        # actually producing data.
+        research_stage = self.analysis_agent.sub_agents[0]
+        analysts_stage = self.analysis_agent.sub_agents[1]
+
         analyses: list[dict] = []
         for cand in candidates:
             # Make the candidate (and thesis) visible to the sub-agents. Direct
-            # mutation shares the live state dict the sub-agents read.
+            # mutation shares the live state dict the sub-agents read. Clear the
+            # per-candidate outputs first so a failed candidate can't inherit the
+            # previous one's analysis (state bleed).
             state["current_candidate"] = cand
             if thesis is not None:
                 state["thesis"] = thesis
+            for key in ("research", "business", "metrics", "market", "diagnosis"):
+                state.pop(key, None)
 
-            async for event in self.analysis_agent.run_async(ctx):
+            async for event in research_stage.run_async(ctx):
                 yield event
-            async for event in self.synthesizer.run_async(ctx):
-                yield event
+
+            if _research_failed(state.get("research")):
+                # Anti-hallucination guard: no real data → no invented verdict.
+                logger.info(
+                    "Guard: insufficient research for %r; skipping diagnosis.",
+                    cand.get("name"),
+                )
+                state["business"] = "Datos insuficientes."
+                state["metrics"] = "Datos insuficientes."
+                state["market"] = "Datos insuficientes."
+                state["diagnosis"] = (
+                    "Datos insuficientes: no se pudo obtener información fiable de "
+                    f"la web de {cand.get('name', 'la candidata')} (la fuente "
+                    "devolvió error o estaba vacía). No se emite diagnóstico para "
+                    "evitar conclusiones inventadas. Confianza: baja."
+                )
+            else:
+                async for event in analysts_stage.run_async(ctx):
+                    yield event
+                async for event in self.synthesizer.run_async(ctx):
+                    yield event
 
             analyses.append(
                 {

@@ -29,7 +29,7 @@ def test_parse_shortlist_with_prose_fallback() -> None:
 
 def test_parse_shortlist_already_dict() -> None:
     raw = {"thesis": {"sector": "AI"}, "candidates": [{"name": "Z"}]}
-    thesis, candidates = parse_shortlist(raw)
+    _, candidates = parse_shortlist(raw)
     assert candidates == [{"name": "Z"}]
 
 
@@ -43,6 +43,25 @@ def test_parse_shortlist_none() -> None:
     assert parse_shortlist(None) == (None, [])
 
 
+def test_parse_shortlist_valid_is_normalized() -> None:
+    raw = {
+        "thesis": {"sector": "AI", "stage": "seed", "geography": "EU",
+                   "signals": ["x"]},
+        "candidates": [
+            {"name": "Acme", "website": "https://acme.com", "one_liner": "AI for X",
+             "source": "grounded"}
+        ],
+    }
+    thesis, candidates = parse_shortlist(raw)
+    # A complete shortlist is validated and normalized: optional candidate
+    # fields are filled with their schema defaults.
+    assert thesis["signals"] == ["x"]
+    assert candidates[0]["industries"] == []
+    assert candidates[0]["regions"] == []
+    assert candidates[0]["score"] is None
+    assert candidates[0]["rationale"] is None
+
+
 def test_pipeline_structure() -> None:
     root = build_pipeline()
     names = [a.name for a in root.sub_agents]
@@ -52,7 +71,6 @@ def test_pipeline_structure() -> None:
         "per_candidate_analysis",
         "reporting_agent",
     ]
-    sub = set(names)
 
     per = next(a for a in root.sub_agents if a.name == "per_candidate_analysis")
     # Analysis must be research FIRST, then the parallel analysts.

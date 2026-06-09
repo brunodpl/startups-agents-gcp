@@ -22,12 +22,15 @@ class Settings:
     # ── Vertex AI routing (aiplatform.googleapis.com → Marketing credit) ──────
     GOOGLE_GENAI_USE_VERTEXAI: str = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "True")
     GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "your-gcp-project")
-    GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "europe-west1")
+    # Gemini 3 is NOT served from europe-west1; "global" has both models we use.
+    # Still Vertex (aiplatform.googleapis.com) → Marketing credit. The Cloud Run
+    # service stays in europe-west1; only model inference uses this location.
+    GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 
     # ── Models ────────────────────────────────────────────────────────────────
     # Flash for cheap/fast steps; Pro for the final synthesis (from F3).
-    MODEL_FLASH: str = os.getenv("MODEL_FLASH", "gemini-2.5-flash")
-    MODEL_PRO: str = os.getenv("MODEL_PRO", "gemini-2.5-pro")
+    MODEL_FLASH: str = os.getenv("MODEL_FLASH", "gemini-3.5-flash")
+    MODEL_PRO: str = os.getenv("MODEL_PRO", "gemini-3.1-pro-preview")
 
     # ── Discovery ─────────────────────────────────────────────────────────────
     # How many candidates the DiscoveryAgent keeps after scoring the pool.
