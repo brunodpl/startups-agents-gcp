@@ -150,12 +150,17 @@ uv run python -m google.adk.cli web agents      # UI local en http://localhost:8
 uv run python -m google.adk.cli deploy cloud_run \
   --project=your-gcp-project --region=europe-west1 \
   --service_name=startup-diagnostics --with_ui agents \
-  -- --allow-unauthenticated --update-env-vars=FIRECRAWL_API_KEY=...
+  -- --allow-unauthenticated --memory=2Gi --timeout=600 \
+     --update-env-vars=FIRECRAWL_API_KEY=...
 ```
 
 - ⚠️ **Las dependencias del contenedor salen de `agents/requirements.txt`**, NO
   del `pyproject.toml`. Si un paquete que importa el agente no está ahí, el
   contenedor arranca pero `/run` devuelve 500 (`ModuleNotFoundError`).
+- ⚠️ **`--memory=2Gi` y `--timeout=600` son obligatorios.** Con los 512Mi por
+  defecto, una corrida completa (3 candidatas, analistas en paralelo) **se queda
+  sin memoria (OOM)** y el contenedor corta la conexión a mitad; los 300s por
+  defecto se quedan cortos para el pipeline síncrono.
 - **Scale-to-zero** por defecto. `--with_ui` = URL clicable. `--allow-unauthenticated`
   = pública (demo). Región `europe-west1` (EU/GDPR).
 - Las keys de fuentes externas se pasan con `--update-env-vars` (o Secret Manager
