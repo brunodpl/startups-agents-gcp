@@ -10,7 +10,9 @@ import os
 # so LLM calls go through aiplatform.googleapis.com (Marketing credit) even on
 # Cloud Run without a .env file. See the `consuming-gcp-credits` skill.
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
-os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "your-gcp-project")
+# GOOGLE_CLOUD_PROJECT comes from the environment (a local .env, loaded by
+# config.py, or a Cloud Run env var set at deploy) — never hard-coded, so the
+# real project ID stays out of the (public) repo.
 os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")  # Gemini 3 not in europe-west1
 
 from .observability import init_cloud_logging

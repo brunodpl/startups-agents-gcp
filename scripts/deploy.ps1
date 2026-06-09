@@ -5,13 +5,30 @@
 #   --memory=2Gi      512Mi OOMs the full pipeline
 #   --timeout=600     the full pipeline can take minutes
 #   --trace_to_cloud  agent traces in Cloud Trace (P1.5)
-# FIRECRAWL_API_KEY is read from the environment, never hardcoded/committed.
+#
+# Identifiers and secrets are NEVER hard-coded/committed:
+#   - GOOGLE_CLOUD_PROJECT is read from the environment (the GCP project to use).
+#   - FIRECRAWL_API_KEY is read from the environment and stored in Secret Manager;
+#     the service reads it via --set-secrets, not a plaintext env var.
 #
 # Usage (PowerShell):
-#   $env:FIRECRAWL_API_KEY = "fc-..."   # or rely on it already being set
+#   $env:GOOGLE_CLOUD_PROJECT = "your-gcp-project-id"
+#   $env:FIRECRAWL_API_KEY    = "fc-..."
 #   ./scripts/deploy.ps1
 
 $ErrorActionPreference = "Stop"
+
+if (-not $env:GOOGLE_CLOUD_PROJECT) {
+    Write-Error "GOOGLE_CLOUD_PROJECT no está en el entorno. Expórtalo antes de desplegar."
+    exit 1
+}
+if (-not $env:FIRECRAWL_API_KEY) {
+    Write-Error "FIRECRAWL_API_KEY no está en el entorno. Expórtala antes de desplegar."
+    exit 1
+}
+
+$project = $env:GOOGLE_CLOUD_PROJECT
+$secretName = "firecrawl-api-key"
 
 Write-Host "==> Preflight (import guard: catches a missing runtime dep before deploy)"
 uv run python -m agents._preflight
@@ -21,16 +38,39 @@ Write-Host "==> Unit tests"
 uv run python -m pytest -q
 if ($LASTEXITCODE -ne 0) { Write-Error "Tests failed; aborting deploy."; exit 1 }
 
-if (-not $env:FIRECRAWL_API_KEY) {
-    Write-Error "FIRECRAWL_API_KEY no está en el entorno. Expórtala antes de desplegar."
-    exit 1
+# ── Firecrawl key -> Secret Manager (no plaintext key on the service or repo) ──
+Write-Host "==> Storing FIRECRAWL_API_KEY in Secret Manager ($secretName)"
+gcloud secrets describe $secretName --project=$project *> $null
+$secretExists = ($LASTEXITCODE -eq 0)
+# Write the value WITHOUT a trailing newline so the stored secret isn't corrupted.
+$tmp = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($tmp, $env:FIRECRAWL_API_KEY)
+try {
+    if ($secretExists) {
+        gcloud secrets versions add $secretName --project=$project --data-file=$tmp
+    } else {
+        gcloud secrets create $secretName --project=$project `
+            --replication-policy=automatic --data-file=$tmp
+    }
+    if ($LASTEXITCODE -ne 0) { Write-Error "Could not write the secret; aborting."; exit 1 }
+} finally {
+    Remove-Item $tmp -Force
 }
+
+# The Cloud Run runtime service account must be able to read the secret.
+$projectNumber = (gcloud projects describe $project --format="value(projectNumber)")
+$runtimeSa = "$projectNumber-compute@developer.gserviceaccount.com"
+Write-Host "==> Granting secretAccessor on $secretName to $runtimeSa"
+gcloud secrets add-iam-policy-binding $secretName --project=$project `
+    --member="serviceAccount:$runtimeSa" `
+    --role="roles/secretmanager.secretAccessor" *> $null
+if ($LASTEXITCODE -ne 0) { Write-Error "Could not grant secret access; aborting."; exit 1 }
 
 Write-Host "==> Deploy to Cloud Run (startup-diagnostics, europe-west1)"
 # adk options come BEFORE the `agents` positional and the `--`; gcloud
 # passthrough args come AFTER the `--`.
 uv run python -m google.adk.cli deploy cloud_run `
-    --project=your-gcp-project `
+    --project=$project `
     --region=europe-west1 `
     --service_name=startup-diagnostics `
     --with_ui `
@@ -40,7 +80,8 @@ uv run python -m google.adk.cli deploy cloud_run `
     --allow-unauthenticated `
     --memory=2Gi `
     --timeout=600 `
-    --update-env-vars="GOOGLE_CLOUD_LOCATION=global,FIRECRAWL_API_KEY=$env:FIRECRAWL_API_KEY"
+    --update-env-vars="GOOGLE_CLOUD_PROJECT=$project,GOOGLE_CLOUD_LOCATION=global" `
+    --set-secrets="FIRECRAWL_API_KEY=${secretName}:latest"
 
 # NOTE: adk bakes `ENV GOOGLE_CLOUD_LOCATION=<--region>` (=europe-west1) into the
 # image, but Gemini 3 is only served from `global`/us-central1. The Cloud Run

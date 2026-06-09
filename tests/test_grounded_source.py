@@ -60,6 +60,8 @@ CANNED = """[
 
 
 def test_search_grounded_normalizes_and_filters(monkeypatch) -> None:
+    # Set the project explicitly so the test doesn't depend on a baked-in default.
+    monkeypatch.setattr(grounded_source.Settings, "GOOGLE_CLOUD_PROJECT", "test-project")
     monkeypatch.setattr(
         grounded_source.genai, "Client", _fake_client_returning(CANNED)
     )
@@ -76,6 +78,9 @@ def test_search_grounded_normalizes_and_filters(monkeypatch) -> None:
 
 
 def test_search_grounded_empty_on_error(monkeypatch) -> None:
+    # Project set so we exercise the client-error path, not the empty-project guard.
+    monkeypatch.setattr(grounded_source.Settings, "GOOGLE_CLOUD_PROJECT", "test-project")
+
     class _BoomModels:
         def generate_content(self, **kwargs):
             raise RuntimeError("vertex down")

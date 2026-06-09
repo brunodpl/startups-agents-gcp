@@ -19,13 +19,18 @@ Exit 0 = ok, non-zero = smoke failed.
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 import uuid
 
 import httpx
 
-DEFAULT_URL = "https://startup-diagnostics-PROJECT_NUMBER.europe-west1.run.app"
+# The Cloud Run URL is not hard-coded (kept out of the public repo). Pass it as
+# the first CLI arg, or set SMOKE_BASE_URL. Find it with:
+#   gcloud run services describe startup-diagnostics --region=europe-west1 \
+#       --format="value(status.url)"
+DEFAULT_URL = os.getenv("SMOKE_BASE_URL", "")
 APP = "agents"
 THESIS = "Busco startups de inteligencia artificial, etapa seed, ámbito global."
 POLL_BUDGET_S = 420
@@ -34,6 +39,9 @@ POLL_EVERY_S = 15
 
 def main() -> int:
     base = (sys.argv[1] if len(sys.argv) > 1 else DEFAULT_URL).rstrip("/")
+    if not base:
+        print("SMOKE FAIL: pass the service URL as the 1st arg or set SMOKE_BASE_URL.")
+        return 1
     user = "smoke"
     session = f"smoke-{uuid.uuid4().hex[:8]}"
 

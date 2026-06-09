@@ -21,7 +21,10 @@ load_dotenv()
 class Settings:
     # ── Vertex AI routing (aiplatform.googleapis.com → Marketing credit) ──────
     GOOGLE_GENAI_USE_VERTEXAI: str = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "True")
-    GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "your-gcp-project")
+    # No default on purpose: supply it via a local ``.env`` or a Cloud Run env
+    # var at deploy time (see scripts/deploy.ps1). Empty keeps the real project
+    # ID out of the (public) repo.
+    GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "")
     # Gemini 3 is NOT served from europe-west1; "global" has both models we use.
     # Still Vertex (aiplatform.googleapis.com) → Marketing credit. The Cloud Run
     # service stays in europe-west1; only model inference uses this location.

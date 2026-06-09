@@ -11,7 +11,7 @@
 **Output:** shortlist diagnosticada (JSON + informe legible) con **citas de los
 frameworks**, expuesta en una URL de Cloud Run.
 
-🔗 **Demo desplegada (Cloud Run):** https://startup-diagnostics-PROJECT_NUMBER.europe-west1.run.app/dev-ui/
+🔗 **Demo en Cloud Run:** la URL se genera al desplegar — recupérala con `gcloud run services describe startup-diagnostics --region=europe-west1 --format="value(status.url)"` (la UI vive en `/dev-ui/`).
 _(se actualiza con cada fase; scale-to-zero → el primer mensaje arranca en ~5-10 s)_
 
 ---
@@ -81,7 +81,7 @@ Si el corpus crece en el futuro → migrar a Vertex AI Search (fuera de esta dem
 
 ## Reglas de Google Cloud
 
-Demo sobre el proyecto `your-gcp-project`. Consume **solo el crédito
+Demo sobre tu proyecto de GCP (variable `GOOGLE_CLOUD_PROJECT`). Consume **solo el crédito
 Marketing** (Discovery Engine queda sin usar en esta demo):
 
 | Crédito | Importe | Caduca | Lo consume | En esta demo |
@@ -132,7 +132,7 @@ startups-agents-gcp/
 ## Puesta en marcha (local)
 
 Requisitos: Python 3.13, [uv](https://docs.astral.sh/uv/), `gcloud` con ADC
-(`gcloud auth application-default login`) sobre `your-gcp-project`.
+(`gcloud auth application-default login`) sobre tu proyecto de GCP.
 
 ```bash
 uv sync
@@ -147,11 +147,18 @@ uv run python -m google.adk.cli web agents      # UI local en http://localhost:8
 ## Despliegue (Cloud Run)
 
 ```bash
+# Exporta el proyecto y la key, y usa el script (preflight + tests + Secret Manager):
+export GOOGLE_CLOUD_PROJECT=tu-proyecto-gcp
+export FIRECRAWL_API_KEY=fc-...
+pwsh ./scripts/deploy.ps1
+
+# Equivalente manual (la key va por Secret Manager, no en texto plano):
 uv run python -m google.adk.cli deploy cloud_run \
-  --project=your-gcp-project --region=europe-west1 \
+  --project=$GOOGLE_CLOUD_PROJECT --region=europe-west1 \
   --service_name=startup-diagnostics --with_ui agents \
   -- --allow-unauthenticated --memory=2Gi --timeout=600 \
-     --update-env-vars=FIRECRAWL_API_KEY=...
+     --update-env-vars=GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT,GOOGLE_CLOUD_LOCATION=global \
+     --set-secrets=FIRECRAWL_API_KEY=firecrawl-api-key:latest
 ```
 
 - ⚠️ **Las dependencias del contenedor salen de `agents/requirements.txt`**, NO
@@ -163,8 +170,12 @@ uv run python -m google.adk.cli deploy cloud_run \
   defecto se quedan cortos para el pipeline síncrono.
 - **Scale-to-zero** por defecto. `--with_ui` = URL clicable. `--allow-unauthenticated`
   = pública (demo). Región `europe-west1` (EU/GDPR).
-- Las keys de fuentes externas se pasan con `--update-env-vars` (o Secret Manager
-  en producción).
+  ⚠️ Pública sin auth: cualquiera puede lanzar el pipeline (consume crédito) y, en
+  una instancia caliente, leer sesiones de otros vía la API de ADK. Aceptable solo
+  para una demo desechable — **borra el servicio tras el evento**
+  (`gcloud run services delete startup-diagnostics --region=europe-west1`).
+- La `FIRECRAWL_API_KEY` se guarda en **Secret Manager** y el servicio la lee con
+  `--set-secrets` (nunca como env var en texto plano ni en el repo).
 
 ---
 
