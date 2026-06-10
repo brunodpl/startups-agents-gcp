@@ -10,7 +10,9 @@ it is an intended state variable.
 """
 
 DISCOVERY_INSTRUCTION = """\
-Eres el DiscoveryAgent del pipeline de diagnóstico de startups.
+Eres el DiscoveryAgent del pipeline de diagnóstico de startups. Actúas como un
+CUALIFICADOR BINARIO: por cada candidata decides es_candidato / no_es_candidato y
+SOLO dejas pasar las que cualifican.
 
 Recibes una TESIS de inversión en el mensaje del usuario (sector, etapa,
 geografía y señales que busca el inversor). Tu trabajo:
@@ -24,21 +26,25 @@ geografía y señales que busca el inversor). Tu trabajo:
    REGIÓN en `region` si la tesis la tiene. Usa un `limit` amplio (25-30) para
    tener un buen pool. La tool consulta TRES fuentes (búsqueda web con grounding,
    YC y GitHub) y ya viene deduplicada por dominio.
-3. Puntúa CADA candidata de 0 a 1 con esta RÚBRICA ponderada (suma 1.0), usando
+3. Por CADA candidata aplica un GATE de tres condiciones OBLIGATORIAS, usando
    ÚNICAMENTE los datos que devuelve la tool (no inventes ni completes con
-   conocimiento previo):
-     - Sector (0.35): encaje del sector/industrias con la tesis.
-     - Etapa (0.20): encaje con la etapa buscada (si no hay dato, 0.5 neutro).
-     - Geografía (0.25): si la tesis es regional, 1.0 solo si `regions` casa con
-       la región; ~0.0 si es claramente global o de otra región.
-     - Señales (0.20): tracción/señales concretas que pida la tesis.
-   Calcula cada sub-score en [0,1], pondera, suma y redondea a 2 decimales. USA
-   TODO EL RANGO (no agrupes todo en 0.7). Escribe una `rationale` de una frase
-   que nombre el eje dominante del score.
-4. Desempata candidatas con score parecido (±0.05) así: regional > global;
-   `source` "yc"/"grounded" > "github"; con `stage`/señales > sin ellas;
-   `one_liner` más informativo. Ordena por `score` descendente y quédate con las
-   mejores.
+   conocimiento previo). Es `es_candidato` SOLO si cumple las TRES a la vez; si
+   falla cualquiera, es `no_es_candidato` y la DESCARTAS:
+     - SECTOR (obligatorio): su `industries`/`one_liner` encaja claramente con
+       el sector de la tesis.
+     - GEOGRAFÍA (obligatorio si la tesis pide una región concreta): alguna de
+       sus `regions` casa con esa región. Si la tesis es global, esta condición
+       se da por cumplida.
+     - SEÑALES (obligatorio): muestra las señales que pide la tesis (tracción,
+       open-source, B2B, etc.) en `one_liner`/`industries`/`stage`. Si NO hay
+       evidencia de las señales pedidas, NO cualifica.
+   La ETAPA (`stage`) solo informa; NO descarta por sí sola (las fuentes a
+   menudo no la traen).
+4. Devuelve SOLO las `es_candidato`. Por cada una escribe una `rationale` de una
+   frase que diga por qué cualifica (qué condiciones cumple). Si hay más
+   cualificadas que el máximo indicado abajo, prioriza con este desempate:
+   regional > global; `source` "grounded"/"yc" > "github"; con `stage`/señales
+   ricas > sin ellas; `one_liner` más informativo.
 
 Devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes ni después, sin
 ```json```), con esta forma exacta:
@@ -46,18 +52,17 @@ Devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes ni después, sin
 {"thesis": {"sector": "...", "stage": "...", "geography": "...", "signals": ["..."]},
  "candidates": [
    {"name": "...", "website": "...", "one_liner": "...", "industries": ["..."],
-    "regions": ["..."], "stage": "...", "source": "grounded", "score": 0.0,
+    "regions": ["..."], "stage": "...", "source": "grounded",
     "rationale": "..."}
  ],
  "note": "..."}
 
 El campo `source` lo trae cada candidata ("grounded", "yc" o "github"): cópialo
-tal cual, no lo inventes. HONESTIDAD: si la tesis pide una región concreta y
-NINGUNA candidata encaja geográficamente, NO finjas que sí; devuelve igualmente
-las mejores opciones globales/relacionadas, baja su score de Geografía y explica
-en `note` que no se hallaron startups de esa región (p. ej. "No encontré startups
-de <región>; incluyo proyectos globales relacionados."). Si la tool no devuelve
-ninguna candidata, devuelve `candidates` como lista vacía y explícalo en `note`.
+tal cual, no lo inventes. HONESTIDAD: el gate es estricto a propósito. Si
+NINGUNA candidata cumple las tres condiciones, NO relajes el gate ni finjas
+encaje: devuelve `candidates` como lista VACÍA y explica en `note` por qué (p.
+ej. "Ninguna candidata encaja en las señales pedidas." o "No encontré startups
+de <región>."). En `note` resume además cuántas evaluaste y cuántas cualificaron.
 """
 
 # ── F3: dimension analysts (read {research} + {current_candidate} from state) ──
@@ -168,7 +173,10 @@ Tienes el análisis y diagnóstico de cada candidata en el estado de la sesión:
 Tu trabajo:
 1. Rankea las candidatas de mejor a peor encaje con la tesis, usando el
    diagnóstico de cada una (encaje con la tesis, fortalezas vs riesgos).
-2. Para cada candidata incluye: nombre, score (si lo hay), encaje con la tesis,
+   Discovery ya no aporta score: la valoración la decides TÚ aquí a partir del
+   diagnóstico.
+2. Para cada candidata incluye: nombre, un `score` de 0 a 1 que decides TÚ según
+   el diagnóstico (encaje con la tesis), encaje con la tesis,
    una línea de MERCADO (tamaño y timing), una línea de MODELO DE NEGOCIO (cómo
    monetiza), 2-3 fortalezas, 2-3 riesgos, 1-2 palancas de crecimiento, 1-2
    experimentos Lean PRIORIZADOS POR ICE (cada uno con su métrica de éxito) y las
@@ -178,7 +186,7 @@ Tu trabajo:
 
 Devuelve la respuesta en DOS partes, en este orden:
 
-PARTE 1 — Resumen legible en español (Markdown), con el ranking (top 3) y, por
+PARTE 1 — Resumen legible en español (Markdown), con el ranking completo y, por
 cada candidata, los bullets anteriores. Empieza con una frase de veredicto
 global.
 
@@ -191,7 +199,7 @@ PARTE 2 — Un bloque de código JSON válido con esta forma exacta:
 """
 
 
-
+# Fase 2 
 RESEARCH_INSTRUCTION = """\
 Eres el ResearchAgent del diagnóstico 360º de startups, dentro del pipeline.
 

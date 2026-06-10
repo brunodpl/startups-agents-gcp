@@ -58,7 +58,6 @@ def test_parse_shortlist_valid_is_normalized() -> None:
     assert thesis["signals"] == ["x"]
     assert candidates[0]["industries"] == []
     assert candidates[0]["regions"] == []
-    assert candidates[0]["score"] is None
     assert candidates[0]["rationale"] is None
 
 

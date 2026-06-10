@@ -36,8 +36,11 @@ class Settings:
     MODEL_PRO: str = os.getenv("MODEL_PRO", "gemini-3.1-pro-preview")
 
     # ── Discovery ─────────────────────────────────────────────────────────────
-    # How many candidates the DiscoveryAgent keeps after scoring the pool.
-    TOP_N: int = int(os.getenv("TOP_N", "3"))
+    # Safety cap on how many qualified candidates (es_candidato) flow into the
+    # per-candidate analysis. Discovery is a binary qualifier, not a ranker:
+    # every candidate that passes the gate is kept, up to this many. Guards the
+    # Cloud Run timeout/memory budget against an overly generous gate.
+    MAX_CANDIDATES: int = int(os.getenv("MAX_CANDIDATES", "8"))
     # Placeholder sector used when a thesis omits one (configurable default).
     DISCOVERY_SECTOR_DEFAULT: str = os.getenv(
         "DISCOVERY_SECTOR_DEFAULT", "artificial intelligence"

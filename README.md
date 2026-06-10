@@ -21,7 +21,7 @@ _(se actualiza con cada fase; scale-to-zero → el primer mensaje arranca en ~5-
 | Fase | Qué entrega | Estado |
 |------|-------------|--------|
 | **F1** | Scaffold + agente "hello-world" ADK sobre Vertex + **deploy a Cloud Run con URL** | ✅ hecho |
-| **F2** | **Discovery**: agente de sourcing (YC OSS) → shortlist puntuada vs tesis | ✅ hecho |
+| **F2** | **Discovery**: agente de sourcing (YC OSS) → shortlist cualificada vs tesis (gate binario) | ✅ hecho |
 | **F3** | **Analysis** (research/business/metrics/market) + **Diagnosis** (frameworks en contexto + citación) | ✅ hecho |
 | **F4** | **Presentation** (informe rankeado) + 2ª fuente (GitHub) con dedupe por dominio | ✅ hecho |
 | **F5** | Harness de evals (4 niveles + LLM-judge) + dataset de regresión + docs | ✅ hecho |
@@ -39,7 +39,7 @@ _(se actualiza con cada fase; scale-to-zero → el primer mensaje arranca en ~5-
 ```mermaid
 flowchart TD
     TH([Tesis: sector · stage · geografía · señales]) --> DISC
-    DISC[1· Discovery<br/>2 fuentes API pública: YC + GitHub<br/>normaliza · dedup por dominio · puntúa vs tesis] --> SL[(Shortlist · top N)]
+    DISC[1· Discovery<br/>2 fuentes API pública: YC + GitHub<br/>normaliza · dedup por dominio · cualifica vs tesis (gate binario)] --> SL[(Shortlist · cualificadas)]
     SL --> ANA
     subgraph ANA[2· Analysis · en paralelo por candidata]
       RES[ResearchAgent · fetch_url + resumen]
@@ -54,10 +54,12 @@ flowchart TD
 ```
 
 - **Discovery**: consulta 2 fuentes públicas gratis vía API (YC OSS + GitHub),
-  normaliza, **deduplica por dominio** y puntúa candidatas contra la tesis.
+  normaliza, **deduplica por dominio** y aplica un **gate binario**
+  (`es_candidato`/`no_es_candidato`) a cada candidata contra la tesis.
   Respeta `robots.txt`/ToS, GDPR-aware; **no** scrapea LinkedIn/Crunchbase ni
   reconstruye una base tipo Harmonic.
-- **Analysis**: un agente custom (`PerCandidateAnalysis`) itera el top N; por
+- **Analysis**: un agente custom (`PerCandidateAnalysis`) itera las cualificadas
+  (hasta `MAX_CANDIDATES`); por
   cada candidata corre `research` y luego los 3 analistas (business/metrics/
   market) **en paralelo** (research primero porque los analistas leen `{research}`).
 - **Diagnosis**: `gemini-2.5-pro`, **grounded en los frameworks en contexto**,
@@ -107,7 +109,7 @@ startups-agents-gcp/
 ├── agents/                  # paquete ADK desplegable (el "app")
 │   ├── agent.py             # root_agent = build_pipeline()
 │   ├── pipeline.py          # SequentialAgent + PerCandidateAnalysis (BaseAgent custom)
-│   ├── config.py            # Settings: routing Vertex, modelos, TOP_N, keys
+│   ├── config.py            # Settings: routing Vertex, modelos, MAX_CANDIDATES, keys
 │   ├── prompts.py           # instrucciones de cada agente
 │   ├── schemas.py           # pydantic: Thesis · Candidate · Shortlist · Report
 │   ├── knowledge.py         # loader: knowledge/*.md → str para el instruction

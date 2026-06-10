@@ -4,7 +4,7 @@ The broken 2026-06-04 revision returned 200 on health checks but 500 on /run
 (missing ``firecrawl``). This asserts the full pipeline runs end-to-end and
 produces a non-empty report — the check that revision lacked.
 
-The full pipeline takes minutes (TOP_N candidates + the Pro synthesis), so
+The full pipeline takes minutes (qualified candidates + the Pro synthesis), so
 holding a single HTTP connection open is fragile (proxies / egress sever long
 connections). Instead this FIRES /run and then POLLS the session state with
 short requests until the report appears — robust to long runtimes and to

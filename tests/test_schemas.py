@@ -16,22 +16,22 @@ def test_thesis_minimal() -> None:
 
 def test_candidate_from_yc() -> None:
     c = Candidate(name="X", website="https://x.com", one_liner="y", source="yc")
-    assert c.score is None  # score se rellena en Discovery
+    assert c.rationale is None  # rationale la rellena Discovery al cualificar
     assert c.industries == []  # defaults vacíos, no None
     assert c.regions == []
 
 
-def test_candidate_scored() -> None:
+def test_candidate_qualified() -> None:
+    # Discovery es un cualificador binario: las que pasan el gate llevan una
+    # rationale de por qué cualifican; no hay score.
     c = Candidate(
         name="X",
         website="https://x.com",
         one_liner="y",
         source="yc",
-        score=0.8,
-        rationale="encaja con la tesis",
+        rationale="encaja en sector, geografía y señales",
     )
-    assert c.score == 0.8
-    assert c.rationale == "encaja con la tesis"
+    assert c.rationale == "encaja en sector, geografía y señales"
 
 
 def test_shortlist_holds_thesis_and_candidates() -> None:
