@@ -55,6 +55,7 @@ def test_dedupe_by_domain_keeps_first() -> None:
 
 def test_find_candidates_merges_and_dedupes(monkeypatch) -> None:
     monkeypatch.setattr(sources, "search_grounded", lambda *a, **k: [])
+    monkeypatch.setattr(sources, "search_spain", lambda *a, **k: [])
     monkeypatch.setattr(
         sources,
         "search_startups",
@@ -81,6 +82,7 @@ def test_find_candidates_merges_and_dedupes(monkeypatch) -> None:
 
 
 def test_find_candidates_grounded_wins_and_geo_ranks(monkeypatch) -> None:
+    monkeypatch.setattr(sources, "search_spain", lambda *a, **k: [])
     monkeypatch.setattr(
         sources,
         "search_grounded",
@@ -115,3 +117,46 @@ def test_find_candidates_grounded_wins_and_geo_ranks(monkeypatch) -> None:
     galicia = [n for n in names if n in {"GroundedShared", "GroundedGalicia"}]
     globals_ = [n for n in names if n in {"YCGlobal", "GHGlobal"}]
     assert names.index(galicia[-1]) < names.index(globals_[0])
+
+
+def test_find_candidates_spain_source_merged_after_grounded(monkeypatch) -> None:
+    """The spain source is merged in. Interleave is round-robin, so source
+    priority applies within a round: grounded beats spain, spain beats YC."""
+    monkeypatch.setattr(
+        sources,
+        "search_grounded",
+        lambda *a, **k: [
+            {"name": "GroundedShared", "website": "https://shared.com",
+             "regions": ["Galicia"], "source": "grounded"},
+        ],
+    )
+    monkeypatch.setattr(
+        sources,
+        "search_spain",
+        lambda *a, **k: [
+            # Round 1: same domain as grounded[0] → grounded wins.
+            {"name": "SpainShared", "website": "https://www.shared.com",
+             "regions": ["Galicia"], "source": "spain"},
+            # Round 2: same domain as yc[1] → spain wins (comes earlier in row).
+            {"name": "SpainOnly", "website": "https://galiciatech.gal",
+             "regions": ["Galicia"], "source": "spain"},
+        ],
+    )
+    monkeypatch.setattr(
+        sources,
+        "search_startups",
+        lambda *a, **k: [
+            {"name": "YCFirst", "website": "https://yc-first.com"},
+            {"name": "YCDupOfSpain", "website": "https://galiciatech.gal"},
+        ],
+    )
+    monkeypatch.setattr(sources, "search_github_projects", lambda *a, **k: [])
+
+    out = sources.find_candidates("ai", region="Galicia", limit=10)
+    names = [c["name"] for c in out]
+    # Grounded beats spain on the shared.com conflict (round 1).
+    assert "GroundedShared" in names and "SpainShared" not in names
+    # Spain beats YC on the galiciatech.gal conflict (round 2).
+    assert "SpainOnly" in names and "YCDupOfSpain" not in names
+    spain_entry = next(c for c in out if c["name"] == "SpainOnly")
+    assert spain_entry["source"] == "spain"

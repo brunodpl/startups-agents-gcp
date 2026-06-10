@@ -38,7 +38,7 @@ class Candidate(BaseModel):
     industries: list[str] = Field(default_factory=list)
     regions: list[str] = Field(default_factory=list)
     stage: str | None = None
-    source: str
+    source: str  # "grounded" | "spain" | "yc" | "github"
     rationale: str | None = None
 
 

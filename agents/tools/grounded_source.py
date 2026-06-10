@@ -14,36 +14,15 @@ See the consuming-gcp-credits skill.
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 
 from google import genai
 from google.genai import types
 
 from ..config import Settings
+from ._json import parse_json_array as _parse_json_array
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_json_array(text: str) -> list[dict]:
-    """Parse a JSON array that may be wrapped in a ```json fence or prose."""
-    text = (text or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
-        text = re.sub(r"\s*```$", "", text).strip()
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        # Fallback: grab the outermost [...] array.
-        i, j = text.find("["), text.rfind("]")
-        if not (0 <= i < j):
-            return []
-        try:
-            data = json.loads(text[i : j + 1])
-        except json.JSONDecodeError:
-            return []
-    return data if isinstance(data, list) else []
 
 
 def _normalize(raw: dict, region: str | None) -> dict:
