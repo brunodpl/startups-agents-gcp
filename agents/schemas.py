@@ -25,8 +25,11 @@ class Thesis(BaseModel):
 class Candidate(BaseModel):
     """A startup surfaced by Discovery.
 
-    ``score`` and ``rationale`` are left empty by the source tools and filled
-    in by the DiscoveryAgent when it ranks candidates against the thesis.
+    Discovery is a binary qualifier: it keeps a candidate only when it passes
+    the gate (sector AND geography AND signals fit the thesis). ``rationale`` is
+    left empty by the source tools and filled in by the DiscoveryAgent with a
+    one-line reason the candidate qualifies. There is no score: presence in the
+    shortlist *is* the decision (``es_candidato``).
     """
 
     name: str
@@ -36,12 +39,11 @@ class Candidate(BaseModel):
     regions: list[str] = Field(default_factory=list)
     stage: str | None = None
     source: str
-    score: float | None = None
     rationale: str | None = None
 
 
 class Shortlist(BaseModel):
-    """The thesis plus the ranked candidates Discovery decided to keep."""
+    """The thesis plus the candidates Discovery qualified (``es_candidato``)."""
 
     thesis: Thesis
     candidates: list[Candidate] = Field(default_factory=list)

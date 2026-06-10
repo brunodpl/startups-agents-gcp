@@ -118,20 +118,20 @@ class PerCandidateAnalysis(BaseAgent):
 
     analysis_agent: BaseAgent
     synthesizer: BaseAgent
-    top_n: int = 3
+    max_candidates: int = 8
 
     def __init__(
         self,
         name: str,
         analysis_agent: BaseAgent,
         synthesizer: BaseAgent,
-        top_n: int = 3,
+        max_candidates: int = 8,
     ) -> None:
         super().__init__(
             name=name,
             analysis_agent=analysis_agent,
             synthesizer=synthesizer,
-            top_n=top_n,
+            max_candidates=max_candidates,
             sub_agents=[analysis_agent, synthesizer],
         )
 
@@ -140,7 +140,7 @@ class PerCandidateAnalysis(BaseAgent):
     ) -> AsyncGenerator[Event, None]:
         state = ctx.session.state
         thesis, candidates = parse_shortlist(state.get("shortlist"))
-        candidates = candidates[: self.top_n]
+        candidates = candidates[: self.max_candidates]
         logger.info("PerCandidateAnalysis: %d candidate(s)", len(candidates))
 
         # analysis_agent = Sequential(research, ParallelAgent(analysts)); split
@@ -233,7 +233,7 @@ def build_pipeline() -> SequentialAgent:
         name="per_candidate_analysis",
         analysis_agent=analysis_agent,
         synthesizer=synthesizer_agent,
-        top_n=Settings.TOP_N,
+        max_candidates=Settings.MAX_CANDIDATES,
     )
     _PIPELINE = SequentialAgent(
         name="startup_diagnostics_pipeline",

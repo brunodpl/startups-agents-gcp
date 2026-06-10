@@ -13,7 +13,7 @@ experimentos Lean priorizados, citando los frameworks de evaluación. Sobre
 ## 2. El pipeline (4 etapas)
 
 ```
-1. Discovery   (sourcing)   tesis -> shortlist cruda (top N)
+1. Discovery   (sourcing)   tesis -> shortlist cualificada (gate binario)
 2. Analysis    (en paralelo) por candidata: research · business · metrics · market
 3. Diagnosis   (synthesizer, gemini-2.5-pro) juicio grounded en frameworks + citas
 4. Presentation(reporting)  informe rankeado (JSON + legible) -> URL Cloud Run
@@ -21,7 +21,7 @@ experimentos Lean priorizados, citando los frameworks de evaluación. Sobre
 
 | Etapa | Agente(s) | Modelo | Entrada | Salida | Tools |
 |---|---|---|---|---|---|
-| Discovery | discovery_agent | Flash | tesis | shortlist puntuada (`state["shortlist"]`) | `find_candidates` (YC + GitHub) |
+| Discovery | discovery_agent | Flash | tesis | shortlist cualificada (`state["shortlist"]`) | `find_candidates` (YC + GitHub) |
 | Analysis | research / business_model / metrics / market | Flash | candidata | señales por dimensión | `fetch_url` (research) |
 | Diagnosis | synthesizer | **Pro** | análisis + frameworks | juicio estructurado + citas | — |
 | Presentation | reporting | Flash | diagnósticos (`state["analyses"]`) | informe rankeado | — |
@@ -30,7 +30,8 @@ experimentos Lean priorizados, citando los frameworks de evaluación. Sobre
 = `[discovery_agent, PerCandidateAnalysis, reporting_agent]`.
 
 - `PerCandidateAnalysis` es un **`BaseAgent` custom**: parsea `state["shortlist"]`
-  (JSON que dejó Discovery, posiblemente con fences ```), e itera el top N. Por
+  (JSON que dejó Discovery, posiblemente con fences ```), e itera las
+  cualificadas (hasta `MAX_CANDIDATES`). Por
   cada candidata fija `state["current_candidate"]` (+ `state["thesis"]`), corre el
   sub-pipeline de análisis y la síntesis, y **acumula** un diagnóstico por
   candidata en `state["analyses"]` (lista de dicts, JSON-serializable).
@@ -53,8 +54,9 @@ solo para la síntesis del diagnóstico, donde la calidad del razonamiento impor
 - Input: tesis `{sector, stage, geografía, señales}` (texto del usuario).
 - `find_candidates` consulta **2 fuentes públicas con API gratis** —
   `yc_source` (YC OSS) + `gh_source` (GitHub) — normaliza al mismo esquema,
-  **interleava** ambas y **deduplica por dominio** (gana YC). El LLM puntúa cada
-  candidata 0-1 vs la tesis y se queda con el top N.
+  **interleava** ambas y **deduplica por dominio** (gana YC). El LLM aplica un
+  **gate binario** (sector AND geografía AND señales) y se queda con las que
+  cualifican (hasta `MAX_CANDIDATES`).
 - **Cumplimiento:** respeta `robots.txt` y ToS; nada de scrapear LinkedIn/Crunchbase;
   GDPR-aware con datos de founders (minimizar/evitar PII).
 - Demo: YC en F2, GitHub añadida en F4 (con dedupe).

@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 # Cheap eval runs unless overridden.
-os.environ.setdefault("TOP_N", "2")
+os.environ.setdefault("MAX_CANDIDATES", "2")
 
 from google.genai import types  # noqa: E402
 
