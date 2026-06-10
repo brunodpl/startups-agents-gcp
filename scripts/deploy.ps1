@@ -10,13 +10,20 @@
 #   - GOOGLE_CLOUD_PROJECT is read from the environment (the GCP project to use).
 #   - FIRECRAWL_API_KEY is read from the environment and stored in Secret Manager;
 #     the service reads it via --set-secrets, not a plaintext env var.
+#   - SESSION_SERVICE_URI (optional) persists sessions in Agent Engine so runs
+#     survive scale-to-zero and can feed evals (agentengine://projects/...).
 #
 # Usage (PowerShell):
 #   $env:GOOGLE_CLOUD_PROJECT = "your-gcp-project-id"
 #   $env:FIRECRAWL_API_KEY    = "fc-..."
+#   $env:SESSION_SERVICE_URI  = "agentengine://projects/.../locations/europe-west1/reasoningEngines/..."
 #   ./scripts/deploy.ps1
 
-$ErrorActionPreference = "Stop"
+# "Continue", not "Stop": gcloud writes informational messages to stderr (e.g.
+# "Updated IAM policy"), and under "Stop" PowerShell 5.1 turns that into a
+# terminating NativeCommandError mid-script. Every native call below checks
+# $LASTEXITCODE explicitly instead.
+$ErrorActionPreference = "Continue"
 
 if (-not $env:GOOGLE_CLOUD_PROJECT) {
     Write-Error "GOOGLE_CLOUD_PROJECT no está en el entorno. Expórtalo antes de desplegar."
@@ -66,6 +73,17 @@ gcloud secrets add-iam-policy-binding $secretName --project=$project `
     --role="roles/secretmanager.secretAccessor" *> $null
 if ($LASTEXITCODE -ne 0) { Write-Error "Could not grant secret access; aborting."; exit 1 }
 
+# ── Session persistence (Agent Engine) ────────────────────────────────────────
+# Optional but recommended: without it sessions are in-memory and die with the
+# instance (scale-to-zero), so past runs can't be replayed or turned into evals.
+$sessionArgs = @()
+if ($env:SESSION_SERVICE_URI) {
+    Write-Host "==> Sessions persisted via Agent Engine ($($env:SESSION_SERVICE_URI -replace 'projects/\d+', 'projects/<number>'))"
+    $sessionArgs = @("--session_service_uri=$env:SESSION_SERVICE_URI")
+} else {
+    Write-Warning "SESSION_SERVICE_URI no está en el entorno: las sesiones serán in-memory (se pierden al reciclar la instancia)."
+}
+
 Write-Host "==> Deploy to Cloud Run (startup-diagnostics, europe-west1)"
 # adk options come BEFORE the `agents` positional and the `--`; gcloud
 # passthrough args come AFTER the `--`.
@@ -75,6 +93,7 @@ uv run python -m google.adk.cli deploy cloud_run `
     --service_name=startup-diagnostics `
     --with_ui `
     --trace_to_cloud `
+    @sessionArgs `
     agents `
     -- `
     --allow-unauthenticated `
@@ -82,6 +101,7 @@ uv run python -m google.adk.cli deploy cloud_run `
     --timeout=600 `
     --update-env-vars="GOOGLE_CLOUD_PROJECT=$project,GOOGLE_CLOUD_LOCATION=global" `
     --set-secrets="FIRECRAWL_API_KEY=${secretName}:latest"
+if ($LASTEXITCODE -ne 0) { Write-Error "adk deploy failed."; exit 1 }
 
 # NOTE: adk bakes `ENV GOOGLE_CLOUD_LOCATION=<--region>` (=europe-west1) into the
 # image, but Gemini 3 is only served from `global`/us-central1. The Cloud Run
