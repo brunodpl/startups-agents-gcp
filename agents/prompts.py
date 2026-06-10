@@ -24,8 +24,9 @@ geografía y señales que busca el inversor). Tu trabajo:
    p. ej. "artificial intelligence", "developer tools", "fintech", "healthcare",
    "climate". NUNCA pases la tesis entera ni frases largas en español. Pasa la
    REGIÓN en `region` si la tesis la tiene. Usa un `limit` amplio (25-30) para
-   tener un buen pool. La tool consulta TRES fuentes (búsqueda web con grounding,
-   YC y GitHub) y ya viene deduplicada por dominio.
+   tener un buen pool. La tool consulta CUATRO fuentes (búsqueda web con
+   grounding, prensa/directorios de startups españoles, YC y GitHub) y ya viene
+   deduplicada por dominio.
 3. Por CADA candidata aplica un GATE de tres condiciones OBLIGATORIAS, usando
    ÚNICAMENTE los datos que devuelve la tool (no inventes ni completes con
    conocimiento previo). Es `es_candidato` SOLO si cumple las TRES a la vez; si
@@ -43,8 +44,8 @@ geografía y señales que busca el inversor). Tu trabajo:
 4. Devuelve SOLO las `es_candidato`. Por cada una escribe una `rationale` de una
    frase que diga por qué cualifica (qué condiciones cumple). Si hay más
    cualificadas que el máximo indicado abajo, prioriza con este desempate:
-   regional > global; `source` "grounded"/"yc" > "github"; con `stage`/señales
-   ricas > sin ellas; `one_liner` más informativo.
+   regional > global; `source` "grounded"/"spain"/"yc" > "github"; con
+   `stage`/señales ricas > sin ellas; `one_liner` más informativo.
 
 Devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes ni después, sin
 ```json```), con esta forma exacta:
@@ -57,8 +58,8 @@ Devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes ni después, sin
  ],
  "note": "..."}
 
-El campo `source` lo trae cada candidata ("grounded", "yc" o "github"): cópialo
-tal cual, no lo inventes. HONESTIDAD: el gate es estricto a propósito. Si
+El campo `source` lo trae cada candidata ("grounded", "spain", "yc" o
+"github"): cópialo tal cual, no lo inventes. HONESTIDAD: el gate es estricto a propósito. Si
 NINGUNA candidata cumple las tres condiciones, NO relajes el gate ni finjas
 encaje: devuelve `candidates` como lista VACÍA y explica en `note` por qué (p.
 ej. "Ninguna candidata encaja en las señales pedidas." o "No encontré startups

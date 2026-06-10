@@ -1,11 +1,13 @@
-"""Unified discovery source: query grounding + YC + GitHub and dedupe by domain.
+"""Unified discovery source: grounding + Spanish press + YC + GitHub, deduped.
 
 The DiscoveryAgent calls ``find_candidates`` (one tool) so deduplication is
 deterministic instead of relying on the LLM to spot duplicates across separate
-tool calls. Three sources are combined:
+tool calls. Four sources are combined:
 
 * ``grounded`` — Gemini + Google Search via Vertex: REAL, region-relevant
   startups (P0.2). Listed first so it wins domain conflicts.
+* ``spain``    — Spanish startup press/directories via Firecrawl (El Referente,
+  Startupxplore, accelerator cohorts). Second: beats YC/GitHub on conflicts.
 * ``yc``       — Y Combinator OSS directory.
 * ``github``   — open-source projects by topic.
 """
@@ -15,6 +17,7 @@ from urllib.parse import urlparse
 
 from .gh_source import search_github_projects
 from .grounded_source import search_grounded
+from .spain_source import search_spain
 from .yc_source import search_startups
 
 
@@ -63,11 +66,12 @@ def _region_matches(candidate: dict, region: str) -> bool:
 def find_candidates(
     sector: str, region: str | None = None, limit: int = 20
 ) -> list[dict]:
-    """Busca startups candidatas en TRES fuentes y deduplica por dominio.
+    """Busca startups candidatas en CUATRO fuentes y deduplica por dominio.
 
     Combina (1) grounding con Google Search vía Vertex —startups reales y
-    regionalmente relevantes—, (2) la API pública de YC y (3) la de GitHub.
-    Etiqueta cada candidata con su `source` ("grounded" | "yc" | "github"),
+    regionalmente relevantes—, (2) prensa/directorios de startups españoles vía
+    Firecrawl, (3) la API pública de YC y (4) la de GitHub. Etiqueta cada
+    candidata con su `source` ("grounded" | "spain" | "yc" | "github"),
     deduplica por dominio web (gana la primera aparición → grounded) y, si hay
     región, sube las candidatas cuyo `regions` casa con ella.
 
@@ -81,10 +85,12 @@ def find_candidates(
         source} (la fuente YC añade también `batch`).
     """
     grounded = search_grounded(sector, region, limit)
+    es = search_spain(sector, region, limit)
     yc = [{**c, "source": "yc"} for c in search_startups(sector, region, limit)]
     gh = search_github_projects(sector, limit)
-    # Grounded first so it wins domain conflicts (most relevant + regional).
-    merged = dedupe_by_domain(_interleave_all([grounded, yc, gh]))
+    # Grounded first so it wins domain conflicts (most relevant + regional);
+    # spain second so the Spanish press beats YC/GitHub on conflicts.
+    merged = dedupe_by_domain(_interleave_all([grounded, es, yc, gh]))
     if region:
         # Stable sort: region-matched candidates rank ahead of global ones.
         merged = sorted(merged, key=lambda c: 0 if _region_matches(c, region) else 1)
