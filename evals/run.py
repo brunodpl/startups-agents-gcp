@@ -24,14 +24,14 @@ from pathlib import Path
 # Cheap eval runs unless overridden.
 os.environ.setdefault("MAX_CANDIDATES", "2")
 
-from google.genai import types  # noqa: E402
+from google.adk.runners import InMemoryRunner
+from google.genai import types
 
-from agents.agent import root_agent  # noqa: E402
-from agents.config import Settings  # noqa: E402
-from agents.pipeline import _strip_and_parse  # noqa: E402
-from google.adk.runners import InMemoryRunner  # noqa: E402
+from agents.agent import root_agent
+from agents.config import Settings
+from agents.pipeline import _strip_and_parse
 
-from .levels import (  # noqa: E402
+from .levels import (
     RunCapture,
     level1_step,
     level2_trajectory,

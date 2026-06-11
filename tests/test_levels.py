@@ -46,7 +46,7 @@ def _good_capture() -> RunCapture:
 
 
 def _all_true_judge(report, criteria):
-    return {c: True for c in criteria}
+    return dict.fromkeys(criteria, True)
 
 
 def test_all_levels_pass_on_good_capture() -> None:

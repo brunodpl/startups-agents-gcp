@@ -200,7 +200,7 @@ PARTE 2 — Un bloque de código JSON válido con esta forma exacta:
 """
 
 
-# Fase 2 
+# Fase 2
 RESEARCH_INSTRUCTION = """\
 Eres el ResearchAgent del diagnóstico 360º de startups, dentro del pipeline.
 
