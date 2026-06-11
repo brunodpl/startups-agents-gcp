@@ -8,20 +8,20 @@ Aquí va el *cómo* y el *por qué*.
 Pipeline **multi-agente** que, dada una **tesis de inversión**, descubre startups
 en fuentes públicas, las analiza y entrega una **shortlist diagnosticada** con
 experimentos Lean priorizados, citando los frameworks de evaluación. Sobre
-**Google ADK** + **Vertex AI** (Gemini 2.5), desplegado en **Cloud Run**.
+**Google ADK** + **Vertex AI** (Gemini 3), desplegado en **Cloud Run**.
 
 ## 2. El pipeline (4 etapas)
 
 ```
 1. Discovery   (sourcing)   tesis -> shortlist cualificada (gate binario)
 2. Analysis    (en paralelo) por candidata: research · business · metrics · market
-3. Diagnosis   (synthesizer, gemini-2.5-pro) juicio grounded en frameworks + citas
+3. Diagnosis   (synthesizer, gemini-3.1-pro-preview) juicio grounded en frameworks + citas
 4. Presentation(reporting)  informe rankeado (JSON + legible) -> URL Cloud Run
 ```
 
 | Etapa | Agente(s) | Modelo | Entrada | Salida | Tools |
 |---|---|---|---|---|---|
-| Discovery | discovery_agent | Flash | tesis | shortlist cualificada (`state["shortlist"]`) | `find_candidates` (YC + GitHub) |
+| Discovery | discovery_agent | Flash | tesis | shortlist cualificada (`state["shortlist"]`) | `find_candidates` (grounded · spain · YC · GitHub) |
 | Analysis | research / business_model / metrics / market | Flash | candidata | señales por dimensión | `fetch_url` (research) |
 | Diagnosis | synthesizer | **Pro** | análisis + frameworks | juicio estructurado + citas | — |
 | Presentation | reporting | Flash | diagnósticos (`state["analyses"]`) | informe rankeado | — |
@@ -146,7 +146,7 @@ Logging estructurado: qué agente actuó, qué tools llamó, latencia
 | Deploy | Cloud Run + scale-to-zero | crédito Marketing, sin coste en reposo |
 | Región | `europe-west1` | EU / GDPR |
 | Python / pkgs | 3.13 / uv | ya instalado; lock reproducible |
-| Ejecución | **síncrona**: todo el pipeline dentro de una petición HTTP (`--timeout=600`) | demo: simple, una URL clicable; mitigado con checkpoints de `analyses` por candidata |
+| Ejecución | **síncrona**: todo el pipeline dentro de una petición HTTP (`--timeout=900`) | demo: simple, una URL clicable; mitigado con checkpoints de `analyses` por candidata |
 
 ## 10. Triggers de v3 (si esto deja de ser una demo)
 

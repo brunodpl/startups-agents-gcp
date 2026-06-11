@@ -38,6 +38,7 @@ Si redespliegas en otro proyecto, recupera la URL con
 
 ## Arquitectura — pipeline de 4 etapas
 
+
 - **Discovery**: consulta 4 fuentes **en paralelo** — grounding con Google
   Search (Vertex), prensa/directorios de startups españoles (Firecrawl), YC OSS
   y GitHub —, normaliza, **deduplica por dominio** (gana grounded → spain → YC)
@@ -48,7 +49,7 @@ Si redespliegas en otro proyecto, recupera la URL con
   (hasta `MAX_CANDIDATES`); por
   cada candidata corre `research` y luego los 3 analistas (business/metrics/
   market) **en paralelo** (research primero porque los analistas leen `{research}`).
-- **Diagnosis**: `gemini-2.5-pro`, **grounded en los frameworks en contexto**,
+- **Diagnosis**: `gemini-3.1-pro-preview`, **grounded en los frameworks en contexto**,
   citando de qué framework sale cada conclusión.
 - **Presentation**: informe rankeado (JSON + legible).
 - Detalle en [docs/architecture.md](docs/architecture.md).
