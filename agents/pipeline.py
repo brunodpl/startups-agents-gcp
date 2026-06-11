@@ -134,14 +134,14 @@ class PerCandidateAnalysis(BaseAgent):
 
     analysis_agent: BaseAgent
     synthesizer: BaseAgent
-    max_candidates: int = 8
+    max_candidates: int = 5
 
     def __init__(
         self,
         name: str,
         analysis_agent: BaseAgent,
         synthesizer: BaseAgent,
-        max_candidates: int = 8,
+        max_candidates: int = 5,
     ) -> None:
         super().__init__(
             name=name,
@@ -190,8 +190,19 @@ class PerCandidateAnalysis(BaseAgent):
                 actions=EventActions(state_delta=delta),
             )
 
-            async for event in research_stage.run_async(ctx):
-                yield event
+            try:
+                async for event in research_stage.run_async(ctx):
+                    yield event
+            except Exception as e:  # transient model/tool failure (e.g. 429)
+                logger.warning(
+                    "Research stage crashed for %r: %s", cand.get("name"), e
+                )
+                # The "Error:" prefix routes this candidate into the existing
+                # anti-hallucination guard below.
+                state["research"] = (
+                    f"Error: la fase de research falló ({type(e).__name__}); "
+                    "sin datos fiables."
+                )
 
             if _research_failed(state.get("research")):
                 # Anti-hallucination guard: no real data → no invented verdict.
@@ -218,10 +229,37 @@ class PerCandidateAnalysis(BaseAgent):
                     actions=EventActions(state_delta=guard_delta),
                 )
             else:
-                async for event in analysts_stage.run_async(ctx):
-                    yield event
-                async for event in self.synthesizer.run_async(ctx):
-                    yield event
+                # Fault isolation (2026-06-10 prod failure): a single Vertex 429
+                # inside the analysts' ParallelAgent TaskGroup killed the WHOLE
+                # run. One candidate's transient failure must cost only that
+                # candidate: keep whatever landed, mark the rest incomplete,
+                # and move on to the next candidate.
+                try:
+                    async for event in analysts_stage.run_async(ctx):
+                        yield event
+                    async for event in self.synthesizer.run_async(ctx):
+                        yield event
+                except Exception as e:
+                    logger.warning(
+                        "Analysis/synthesis crashed for %r: %s",
+                        cand.get("name"),
+                        e,
+                    )
+                    incomplete = (
+                        "Análisis incompleto: fallo transitorio del modelo "
+                        f"({type(e).__name__}). No se fabrica veredicto; "
+                        "reintenta la corrida para esta candidata."
+                    )
+                    recovery = {
+                        k: state.get(k) or incomplete
+                        for k in ("business", "metrics", "market", "diagnosis")
+                    }
+                    state.update(recovery)
+                    yield Event(
+                        author=self.name,
+                        invocation_id=ctx.invocation_id,
+                        actions=EventActions(state_delta=recovery),
+                    )
 
             analyses.append(
                 {

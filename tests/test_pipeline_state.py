@@ -114,3 +114,74 @@ def test_guard_verdict_is_recorded_as_delta() -> None:
     assert len(guard) == 2  # one per candidate; research failed for both
     assert state["analyses"][0]["business"] == "Datos insuficientes."
     assert "no se emite diagnóstico" in state["analyses"][0]["diagnosis"].lower()
+
+
+class StubBoom(BaseAgent):
+    """Simulates a transient model failure (e.g. Vertex 429 inside a TaskGroup)."""
+
+    async def _run_async_impl(self, ctx) -> AsyncGenerator[Event, None]:
+        raise RuntimeError("429 RESOURCE_EXHAUSTED (simulated)")
+        yield  # pragma: no cover  (makes this an async generator)
+
+
+def test_one_candidate_analyst_crash_does_not_lose_the_run() -> None:
+    # Regression for the 2026-06-10 prod failure: a single Vertex 429 in one
+    # parallel analyst killed the WHOLE run via the TaskGroup. A failing
+    # analysts stage must yield an honest "incompleto" entry for that candidate
+    # and the loop must continue to the next one.
+    analysis = SequentialAgent(
+        name="analysis",
+        sub_agents=[
+            StubWriter(
+                name="research_stub",
+                payload={"research": "RESEARCH_STATUS: OK\ndatos reales."},
+            ),
+            StubBoom(name="analysts_stub"),
+        ],
+    )
+    agent = PerCandidateAnalysis(
+        name="per_candidate_analysis",
+        analysis_agent=analysis,
+        synthesizer=StubWriter(name="synth_stub", payload={"diagnosis": "ok"}),
+        max_candidates=8,
+    )
+    deltas, state = asyncio.run(_run(agent))
+
+    analyses = state["analyses"]
+    assert [a["candidate"]["name"] for a in analyses] == ["Alpha", "Beta"]
+    for a in analyses:
+        # The research that DID succeed is kept; the missing analyses carry an
+        # explicit incomplete marker instead of a fabricated verdict.
+        assert "RESEARCH_STATUS: OK" in a["research"]
+        assert "incompleto" in a["business"].lower()
+        assert "incompleto" in a["diagnosis"].lower()
+    # And the recovery verdicts were recorded as deltas for persisted sessions.
+    assert any("incompleto" in str(d.get("diagnosis", "")).lower() for d in deltas)
+
+
+def test_research_crash_falls_back_to_guard() -> None:
+    analysis = SequentialAgent(
+        name="analysis",
+        sub_agents=[
+            StubBoom(name="research_stub"),
+            StubWriter(
+                name="analysts_stub",
+                payload={"business": "b", "metrics": "m", "market": "k"},
+            ),
+        ],
+    )
+    agent = PerCandidateAnalysis(
+        name="per_candidate_analysis",
+        analysis_agent=analysis,
+        synthesizer=StubWriter(name="synth_stub", payload={"diagnosis": "ok"}),
+        max_candidates=8,
+    )
+    _, state = asyncio.run(_run(agent))
+
+    analyses = state["analyses"]
+    assert len(analyses) == 2
+    for a in analyses:
+        # A crashed research step is treated like failed research: the
+        # anti-hallucination guard refuses to diagnose.
+        assert "datos insuficientes" in a["diagnosis"].lower()
+        assert a["business"] == "Datos insuficientes."

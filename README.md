@@ -161,7 +161,7 @@ pwsh ./scripts/deploy.ps1
 uv run python -m google.adk.cli deploy cloud_run \
   --project=$GOOGLE_CLOUD_PROJECT --region=europe-west1 \
   --service_name=startup-diagnostics --with_ui agents \
-  -- --allow-unauthenticated --memory=2Gi --timeout=600 \
+  -- --allow-unauthenticated --memory=2Gi --timeout=900 \
      --update-env-vars=GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT,GOOGLE_CLOUD_LOCATION=global \
      --set-secrets=FIRECRAWL_API_KEY=firecrawl-api-key:latest
 ```
@@ -169,10 +169,11 @@ uv run python -m google.adk.cli deploy cloud_run \
 - ⚠️ **Las dependencias del contenedor salen de `agents/requirements.txt`**, NO
   del `pyproject.toml`. Si un paquete que importa el agente no está ahí, el
   contenedor arranca pero `/run` devuelve 500 (`ModuleNotFoundError`).
-- ⚠️ **`--memory=2Gi` y `--timeout=600` son obligatorios.** Con los 512Mi por
-  defecto, una corrida completa (3 candidatas, analistas en paralelo) **se queda
-  sin memoria (OOM)** y el contenedor corta la conexión a mitad; los 300s por
-  defecto se quedan cortos para el pipeline síncrono.
+- ⚠️ **`--memory=2Gi` y `--timeout=900` son obligatorios.** Con los 512Mi por
+  defecto, una corrida completa (varias candidatas, analistas en paralelo) **se
+  queda sin memoria (OOM)** y el contenedor corta la conexión a mitad; los 300s
+  por defecto se quedan cortos para el pipeline síncrono (una candidata cuesta
+  ~70s; `MAX_CANDIDATES=5` por defecto).
 - **Scale-to-zero** por defecto. `--with_ui` = URL clicable. `--allow-unauthenticated`
   = pública (demo). Región `europe-west1` (EU/GDPR).
   ⚠️ Pública sin auth: cualquiera puede lanzar el pipeline (consume crédito) y, en

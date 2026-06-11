@@ -40,7 +40,10 @@ class Settings:
     # per-candidate analysis. Discovery is a binary qualifier, not a ranker:
     # every candidate that passes the gate is kept, up to this many. Guards the
     # Cloud Run timeout/memory budget against an overly generous gate.
-    MAX_CANDIDATES: int = int(os.getenv("MAX_CANDIDATES", "8"))
+    # 5, not 8: a candidate costs ~70s (research + parallel analysts + Pro
+    # synthesis), so 8 blew the request timeout on 2026-06-10; 5 x ~70s fits
+    # comfortably in the 900s deploy timeout.
+    MAX_CANDIDATES: int = int(os.getenv("MAX_CANDIDATES", "5"))
     # Placeholder sector used when a thesis omits one (configurable default).
     DISCOVERY_SECTOR_DEFAULT: str = os.getenv(
         "DISCOVERY_SECTOR_DEFAULT", "artificial intelligence"
