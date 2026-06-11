@@ -61,6 +61,22 @@ def _strip_and_parse(text: str) -> dict | list:
         raise
 
 
+def _usable_candidates(candidates: object) -> list[dict]:
+    """Keep only entries the loop can actually work with: dicts with a name.
+
+    The tolerant fallback paths can let malformed entries through (the model
+    sometimes emits partial objects); a candidate without a name can't be
+    researched or reported on, so it is dropped here instead of failing later.
+    """
+    if not isinstance(candidates, list):
+        return []
+    return [
+        c
+        for c in candidates
+        if isinstance(c, dict) and str(c.get("name") or "").strip()
+    ]
+
+
 def parse_shortlist(raw: object) -> tuple[dict | None, list[dict]]:
     """Turn Discovery's ``state["shortlist"]`` into (thesis, candidates).
 
@@ -76,7 +92,7 @@ def parse_shortlist(raw: object) -> tuple[dict | None, list[dict]]:
         logger.warning("Could not parse shortlist: %s", e)
         return None, []
     if isinstance(data, list):
-        return None, data
+        return None, _usable_candidates(data)
     # Enforce the schema when the data is complete; fall back tolerantly to the
     # raw dicts otherwise (the model may emit a partial thesis on some runs).
     try:
@@ -84,7 +100,7 @@ def parse_shortlist(raw: object) -> tuple[dict | None, list[dict]]:
         return sl.thesis.model_dump(), [c.model_dump() for c in sl.candidates]
     except ValidationError as e:
         logger.warning("Shortlist failed schema validation, using raw dicts: %s", e)
-        return data.get("thesis"), data.get("candidates") or []
+        return data.get("thesis"), _usable_candidates(data.get("candidates"))
 
 
 # Markers meaning the research step produced no usable data: the RESEARCH_STATUS
@@ -152,14 +168,27 @@ class PerCandidateAnalysis(BaseAgent):
         analyses: list[dict] = []
         for cand in candidates:
             # Make the candidate (and thesis) visible to the sub-agents. Direct
-            # mutation shares the live state dict the sub-agents read. Clear the
-            # per-candidate outputs first so a failed candidate can't inherit the
-            # previous one's analysis (state bleed).
+            # mutation shares the live state dict the sub-agents read; the
+            # state_delta event below records the SAME change so persisted
+            # sessions (Agent Engine / SESSION_SERVICE_URI) can replay it —
+            # deltas are the only thing session services persist. Clear the
+            # per-candidate outputs first so a failed candidate can't inherit
+            # the previous one's analysis (state bleed).
+            cleared = dict.fromkeys(
+                ("research", "business", "metrics", "market", "diagnosis")
+            )
             state["current_candidate"] = cand
+            delta: dict = {"current_candidate": cand, **cleared}
             if thesis is not None:
                 state["thesis"] = thesis
-            for key in ("research", "business", "metrics", "market", "diagnosis"):
+                delta["thesis"] = thesis
+            for key in cleared:
                 state.pop(key, None)
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                actions=EventActions(state_delta=delta),
+            )
 
             async for event in research_stage.run_async(ctx):
                 yield event
@@ -170,14 +199,23 @@ class PerCandidateAnalysis(BaseAgent):
                     "Guard: insufficient research for %r; skipping diagnosis.",
                     cand.get("name"),
                 )
-                state["business"] = "Datos insuficientes."
-                state["metrics"] = "Datos insuficientes."
-                state["market"] = "Datos insuficientes."
-                state["diagnosis"] = (
-                    "Datos insuficientes: no se pudo obtener información fiable de "
-                    f"la web de {cand.get('name', 'la candidata')} (la fuente "
-                    "devolvió error o estaba vacía). No se emite diagnóstico para "
-                    "evitar conclusiones inventadas. Confianza: baja."
+                no_data = "Datos insuficientes."
+                guard_delta = {
+                    "business": no_data,
+                    "metrics": no_data,
+                    "market": no_data,
+                    "diagnosis": (
+                        "Datos insuficientes: no se pudo obtener información fiable "
+                        f"de la web de {cand.get('name', 'la candidata')} (la fuente "
+                        "devolvió error o estaba vacía). No se emite diagnóstico "
+                        "para evitar conclusiones inventadas. Confianza: baja."
+                    ),
+                }
+                state.update(guard_delta)
+                yield Event(
+                    author=self.name,
+                    invocation_id=ctx.invocation_id,
+                    actions=EventActions(state_delta=guard_delta),
                 )
             else:
                 async for event in analysts_stage.run_async(ctx):
@@ -195,14 +233,23 @@ class PerCandidateAnalysis(BaseAgent):
                     "diagnosis": state.get("diagnosis"),
                 }
             )
+            # Checkpoint after every candidate: a run that dies mid-loop still
+            # leaves the completed candidates on the persisted session.
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                actions=EventActions(state_delta={"analyses": list(analyses)}),
+            )
 
         state["analyses"] = analyses
-        # Record a delta so the accumulated analyses persist on the session.
-        yield Event(
-            author=self.name,
-            invocation_id=ctx.invocation_id,
-            actions=EventActions(state_delta={"analyses": analyses}),
-        )
+        if not candidates:
+            # No per-candidate checkpoints ran: record the (empty) result so
+            # downstream stages and evals still find the key.
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                actions=EventActions(state_delta={"analyses": analyses}),
+            )
 
 
 _PIPELINE: SequentialAgent | None = None
