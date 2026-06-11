@@ -12,6 +12,7 @@ tool calls. Four sources are combined:
 * ``github``   — open-source projects by topic.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from itertools import zip_longest
 from urllib.parse import urlparse
 
@@ -84,10 +85,19 @@ def find_candidates(
         Lista de dicts {name, website, one_liner, industries, regions, stage,
         source} (la fuente YC añade también `batch`).
     """
-    grounded = search_grounded(sector, region, limit)
-    es = search_spain(sector, region, limit)
-    yc = [{**c, "source": "yc"} for c in search_startups(sector, region, limit)]
-    gh = search_github_projects(sector, limit)
+    # The four sources are independent blocking I/O (grounded is an LLM+search
+    # round-trip, spain is several Firecrawl scrapes) → fetch them concurrently.
+    # Each source swallows its own failures and returns [], so .result() is as
+    # safe as the previous sequential calls.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_grounded = pool.submit(search_grounded, sector, region, limit)
+        f_es = pool.submit(search_spain, sector, region, limit)
+        f_yc = pool.submit(search_startups, sector, region, limit)
+        f_gh = pool.submit(search_github_projects, sector, limit)
+        grounded = f_grounded.result()
+        es = f_es.result()
+        yc = [{**c, "source": "yc"} for c in f_yc.result()]
+        gh = f_gh.result()
     # Grounded first so it wins domain conflicts (most relevant + regional);
     # spain second so the Spanish press beats YC/GitHub on conflicts.
     merged = dedupe_by_domain(_interleave_all([grounded, es, yc, gh]))
