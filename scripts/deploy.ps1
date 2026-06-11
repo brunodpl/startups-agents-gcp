@@ -3,7 +3,8 @@
 # Runs the import preflight + unit tests, then deploys to Cloud Run with the
 # flags the service actually needs:
 #   --memory=2Gi      512Mi OOMs the full pipeline
-#   --timeout=600     the full pipeline can take minutes
+#   --timeout=900     MAX_CANDIDATES(5) × ~70s/candidata + discovery/reporting;
+#                     600s was exceeded by the 8-candidate run of 2026-06-10
 #   --trace_to_cloud  agent traces in Cloud Trace (P1.5)
 #
 # Identifiers and secrets are NEVER hard-coded/committed:
@@ -98,7 +99,7 @@ uv run python -m google.adk.cli deploy cloud_run `
     -- `
     --allow-unauthenticated `
     --memory=2Gi `
-    --timeout=600 `
+    --timeout=900 `
     --update-env-vars="GOOGLE_CLOUD_PROJECT=$project,GOOGLE_CLOUD_LOCATION=global" `
     --set-secrets="FIRECRAWL_API_KEY=${secretName}:latest"
 if ($LASTEXITCODE -ne 0) { Write-Error "adk deploy failed."; exit 1 }

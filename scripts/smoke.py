@@ -33,7 +33,7 @@ import httpx
 DEFAULT_URL = os.getenv("SMOKE_BASE_URL", "")
 APP = "agents"
 THESIS = "Busco startups de inteligencia artificial, etapa seed, ámbito global."
-POLL_BUDGET_S = 420
+POLL_BUDGET_S = 900  # full run with MAX_CANDIDATES=5 can take ~6-8 min
 POLL_EVERY_S = 15
 
 
