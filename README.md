@@ -42,118 +42,38 @@ Si redespliegas en otro proyecto, recupera la URL con
 flowchart TD
     classDef flash fill:#4285F4,stroke:#1a56db,color:#fff
     classDef pro fill:#0F9D58,stroke:#05653a,color:#fff
-    classDef tool fill:#F4B400,stroke:#a47800,color:#111
-    classDef st fill:#e53e3e,stroke:#9b2c2c,color:#fff
-    classDef ext fill:#718096,stroke:#4a5568,color:#fff
-    classDef gcp fill:#2b6cb0,stroke:#1e429f,color:#fff
-    classDef purp fill:#805ad5,stroke:#553c9a,color:#fff
-    classDef grn fill:#38a169,stroke:#276749,color:#fff
+    classDef io fill:#805ad5,stroke:#553c9a,color:#fff
 
-    USER(["Investment Thesis\nsector - stage - geography - signals"]):::purp
+    IN(["Investment Thesis\nsector, stage, geography, signals"]):::io
 
-    subgraph GCP["Google Cloud Platform - europe-west1"]
-        CR["Cloud Run\nstartup-diagnostics\n2Gi RAM, 900s timeout, scale-to-zero"]:::gcp
-        SECRET["Secret Manager\nFIRECRAWL_API_KEY"]:::gcp
-        CLOG["Cloud Logging"]:::gcp
-    end
+    DA["discovery_agent  Gemini Flash\nQueries 4 sources in parallel: Vertex Search,\nFirecrawl press, YC OSS API, GitHub Topics\nDedupe by domain, binary gate → shortlist"]:::flash
 
-    subgraph PIPELINE["SequentialAgent - agents/pipeline.py + agent.py"]
+    subgraph LOOP["Per-Candidate Loop  (up to MAX_CANDIDATES)"]
+        RA["research_agent  Gemini Flash\nFetches and summarises the candidate website\nvia Firecrawl, 20k char cap"]:::flash
 
-        subgraph S1["Stage 1 - Discovery"]
-            DA["discovery_agent\nGemini Flash\nsub_agents/discovery.py"]:::flash
-            subgraph SRCS["find_candidates - tools/sources.py - ThreadPoolExecutor - 4 sources parallel"]
-                GS["grounded_source\nVertex AI + Google Search"]:::tool
-                SS["spain_source\nFirecrawl - El Referente + Startupxplore"]:::tool
-                YCS["yc_source\nYC OSS API"]:::tool
-                GHS["gh_source\nGitHub Topics API"]:::tool
-                DD["dedupe_by_domain\nround-robin interleave\nbinary gate: sector AND geo AND signals\nMAX_CANDIDATES cap, regional-first sort"]:::tool
-            end
-            GS --> DD
-            SS --> DD
-            YCS --> DD
-            GHS --> DD
+        subgraph PAR["ParallelAgent — 3 analysts run simultaneously"]
+            BM["business_model_agent  Flash\nValue prop, revenue model, segment"]:::flash
+            ME["metrics_agent  Flash\nTraction signals, unit economics"]:::flash
+            MK["market_agent  Flash\nMarket size, competition, timing"]:::flash
         end
 
-        SL[("state shortlist\nThesis + Candidates")]:::st
-
-        subgraph S2["Stage 2 - PerCandidateAnalysis - iterates per candidate"]
-            RA["research_agent\nGemini Flash\nsub_agents/research.py"]:::flash
-            FU["fetch_url\ntools/fetch_url.py\nFirecrawl scrape, 20k char cap"]:::tool
-            GUARD{"_research_failed?\n_FAIL_MARKERS check\nanti-hallucination guard"}
-            BMA["business_model_agent\nGemini Flash\nvalue prop, segment, monetisation"]:::flash
-            MAG["metrics_agent\nGemini Flash\ntraction, unit economics"]:::flash
-            MKT["market_agent\nGemini Flash\nmarket size, competition, timing"]:::flash
-            SYN["synthesizer_agent\nGemini Pro 3.1\nsub_agents/diagnosis.py\ngrounded verdict + citations"]:::pro
-            KN["knowledge/\neval_framework.md\nlean_growth.md\nin-context via load_frameworks()"]:::grn
-            OBS["observability.py\nCloud Logging init"]
-        end
-
-        AN[("state analyses\ncheckpoint per candidate\nfault-isolated")]:::st
-
-        subgraph S4["Stage 4 - Reporting"]
-            REP["reporting_agent\nGemini Flash\nsub_agents/reporting.py"]:::flash
-        end
-
-        RPT[("state report\nranking, resumen\nReportItem with scores")]:::st
+        SY["synthesizer_agent  Gemini Pro 3.1\nCombines all 3 analyses with knowledge/ in-context\neval_framework.md + lean_growth.md, no RAG\nVerdict with explicit framework citations"]:::pro
     end
 
-    RESP(["Ranked Startup Report\nname, score, fortalezas, riesgos\npalancas, experimentos, citas"]):::purp
+    RE["reporting_agent  Gemini Flash\nReads all N diagnoses, ranks by score\nBuilds final report with citas de frameworks"]:::flash
 
-    subgraph EXT["External APIs"]
-        VAI["Vertex AI\nGemini 3.5-flash + 3.1-pro-preview"]:::ext
-        FCAPI["Firecrawl API"]:::ext
-        YCAPI["YC OSS API\nyc-oss.github.io"]:::ext
-        GHAPI["GitHub Public API\nunauthenticated"]:::ext
-        GSEARCH["Google Search\nVertex Grounding"]:::ext
-    end
+    OUT(["Ranked Startup Report\nFortalezas, Riesgos, Palancas, Experimentos, Citas"]):::io
 
-    subgraph EVALS["Eval Harness - evals/"]
-        EDS["datasets/regression.jsonl\n4 test theses + expected criteria"]
-        EL["levels.py\n4-tier: Step, Trajectory, Tools, Final"]
-        EJ["LLM Judge Gemini Flash\ncriterion coverage threshold 70%"]
-    end
-
-    USER --> CR
-    CR --> DA
-    DA --> SRCS
-    DD --> SL
-    SL --> RA
-    RA --> FU
-    FU --> GUARD
-    GUARD -- ok --> BMA
-    GUARD -- ok --> MAG
-    GUARD -- ok --> MKT
-    GUARD -- failed --> AN
-    BMA --> SYN
-    MAG --> SYN
-    MKT --> SYN
-    KN -. in-context .-> SYN
-    SYN --> AN
-    AN -. next candidate .-> RA
-    AN --> REP
-    REP --> RPT
-    RPT --> RESP
-
-    SECRET -. API key .-> FU
-    OBS --> CLOG
-
-    GS --> VAI
-    GS --> GSEARCH
-    SS --> FCAPI
-    YCS --> YCAPI
-    GHS --> GHAPI
-    DA --> VAI
-    RA --> VAI
-    BMA --> VAI
-    MAG --> VAI
-    MKT --> VAI
-    SYN --> VAI
-    REP --> VAI
-    FU --> FCAPI
-
-    EDS -.-> DA
-    RPT --> EL
-    EL --> EJ
+    IN --> DA
+    DA -->|"qualified shortlist"| RA
+    RA --> BM
+    RA --> ME
+    RA --> MK
+    BM --> SY
+    ME --> SY
+    MK --> SY
+    SY -->|"accumulated diagnoses"| RE
+    RE --> OUT
 ```
 
 - **Discovery**: consulta 4 fuentes **en paralelo** — grounding con Google
