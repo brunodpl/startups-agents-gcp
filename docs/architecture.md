@@ -35,6 +35,13 @@ experimentos Lean priorizados, citando los frameworks de evaluación. Sobre
   cada candidata fija `state["current_candidate"]` (+ `state["thesis"]`), corre el
   sub-pipeline de análisis y la síntesis, y **acumula** un diagnóstico por
   candidata en `state["analyses"]` (lista de dicts, JSON-serializable).
+- **Persistencia del estado por candidata:** además de mutar el dict vivo (lo
+  que ven los sub-agentes), el loop emite un **evento con `state_delta`** por
+  cada escritura (selección de candidata, veredicto del guard, y un
+  **checkpoint de `analyses` tras cada candidata**). Las sesiones persistidas
+  (Agent Engine, `SESSION_SERVICE_URI`) se reconstruyen SOLO desde deltas, así
+  que sin esto el estado intermedio sería invisible para replay/evals; y si la
+  corrida muere a mitad, las candidatas ya completadas quedan en la sesión.
 - El sub-pipeline de análisis es `SequentialAgent([research, ParallelAgent([
   business, metrics, market])])`: **research primero** (escribe `state["research"]`)
   y luego los 3 analistas **en paralelo**, porque leen `{research}`. (El plan
@@ -52,11 +59,14 @@ solo para la síntesis del diagnóstico, donde la calidad del razonamiento impor
 ## 3. Discovery (sourcing real, sin reconstruir Harmonic)
 
 - Input: tesis `{sector, stage, geografía, señales}` (texto del usuario).
-- `find_candidates` consulta **2 fuentes públicas con API gratis** —
-  `yc_source` (YC OSS) + `gh_source` (GitHub) — normaliza al mismo esquema,
-  **interleava** ambas y **deduplica por dominio** (gana YC). El LLM aplica un
-  **gate binario** (sector AND geografía AND señales) y se queda con las que
-  cualifican (hasta `MAX_CANDIDATES`).
+- `find_candidates` consulta **4 fuentes** — `grounded_source` (Gemini + Google
+  Search vía Vertex), `spain_source` (prensa/directorios españoles vía
+  Firecrawl), `yc_source` (YC OSS) y `gh_source` (GitHub) — **en paralelo**
+  (`ThreadPoolExecutor`: cada fuente es I/O bloqueante independiente y ya traga
+  sus propios fallos), normaliza al mismo esquema, **interleava** y **deduplica
+  por dominio** (gana grounded, luego spain). El LLM aplica un **gate binario**
+  (sector AND geografía AND señales) y se queda con las que cualifican (hasta
+  `MAX_CANDIDATES`).
 - **Cumplimiento:** respeta `robots.txt` y ToS; nada de scrapear LinkedIn/Crunchbase;
   GDPR-aware con datos de founders (minimizar/evitar PII).
 - Demo: YC en F2, GitHub añadida en F4 (con dedupe).
@@ -136,3 +146,16 @@ Logging estructurado: qué agente actuó, qué tools llamó, latencia
 | Deploy | Cloud Run + scale-to-zero | crédito Marketing, sin coste en reposo |
 | Región | `europe-west1` | EU / GDPR |
 | Python / pkgs | 3.13 / uv | ya instalado; lock reproducible |
+| Ejecución | **síncrona**: todo el pipeline dentro de una petición HTTP (`--timeout=600`) | demo: simple, una URL clicable; mitigado con checkpoints de `analyses` por candidata |
+
+## 10. Triggers de v3 (si esto deja de ser una demo)
+
+Igual que el conocimiento tiene su salida documentada (corpus crece → Vertex AI
+Search), estos son los límites aceptados de la demo y su salida:
+
+| Límite aceptado hoy | Trigger | Salida |
+|---|---|---|
+| Ejecución síncrona en una petición (cap real: `MAX_CANDIDATES` × `--timeout`) | corridas > ~8 candidatas o clientes que no esperan minutos | modelo async/job: Cloud Run Jobs o Cloud Tasks + polling de sesión (el smoke test ya hace fire-and-poll) |
+| Candidatas en serie (claves de estado compartidas: `current_candidate`, `research`, …) | la latencia por corrida importa | namespacing de claves por candidata (`research:{i}`) → desbloquea paralelizar el loop |
+| `--allow-unauthenticated`, sin rate-limit | cualquier uso más allá del evento | IAM/IAP delante del servicio + atribución de coste por corrida |
+| Ranking del informe lo emite el LLM (no determinista) | clientes comparan corridas entre sí | rúbrica de scoring en código (el LLM puntúa criterios; el código ordena) |

@@ -61,6 +61,27 @@ def test_parse_shortlist_valid_is_normalized() -> None:
     assert candidates[0]["rationale"] is None
 
 
+def test_parse_shortlist_fallback_drops_unusable_candidates() -> None:
+    # Incomplete thesis → schema validation fails → tolerant fallback. Entries
+    # that are not dicts or have no name are unusable downstream and dropped.
+    raw = {
+        "thesis": {"sector": "AI"},
+        "candidates": [
+            {"name": "OK", "website": "https://ok.com"},
+            {"website": "https://no-name.com"},
+            "garbage-string",
+            {"name": "   "},
+        ],
+    }
+    _, candidates = parse_shortlist(raw)
+    assert [c["name"] for c in candidates] == ["OK"]
+
+
+def test_parse_shortlist_bare_list_drops_unusable_candidates() -> None:
+    _, candidates = parse_shortlist('[{"name": "A"}, {"foo": 1}, 42]')
+    assert candidates == [{"name": "A"}]
+
+
 def test_pipeline_structure() -> None:
     root = build_pipeline()
     names = [a.name for a in root.sub_agents]

@@ -14,8 +14,8 @@ this module never touches the network.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from agents.tools.sources import _domain
 
