@@ -38,23 +38,6 @@ Si redespliegas en otro proyecto, recupera la URL con
 
 ## Arquitectura — pipeline de 4 etapas
 
-```mermaid
-flowchart TD
-    TH([Tesis: sector · stage · geografía · señales]) --> DISC
-    DISC[1· Discovery<br/>4 fuentes en paralelo: grounding Google Search · prensa ES · YC · GitHub<br/>normaliza · dedup por dominio · cualifica vs tesis (gate binario)] --> SL[(Shortlist · cualificadas)]
-    SL --> ANA
-    subgraph ANA[2· Analysis · en paralelo por candidata]
-      RES[ResearchAgent · fetch_url + resumen]
-      BM[BusinessModel]
-      MET[Metrics / unit economics]
-      MK[Market / competencia]
-    end
-    ANA --> DIAG[3· Diagnosis · SynthesizerAgent · gemini-2.5-pro<br/>fortalezas · riesgos · palancas · fit con tesis · experimentos Lean]
-    KN[(knowledge/*.md<br/>frameworks en contexto)] -. inyectado en instruction .-> DIAG
-    DIAG --> REP[4· Presentation · ReportingAgent<br/>informe rankeado JSON + legible]
-    REP --> OUT([Shortlist diagnosticada con citas → URL Cloud Run])
-```
-
 - **Discovery**: consulta 4 fuentes **en paralelo** — grounding con Google
   Search (Vertex), prensa/directorios de startups españoles (Firecrawl), YC OSS
   y GitHub —, normaliza, **deduplica por dominio** (gana grounded → spain → YC)
@@ -81,27 +64,6 @@ Si el corpus crece en el futuro → migrar a Vertex AI Search (fuera de esta dem
 
 **Auditabilidad por prompting:** el agente cita el framework de cada conclusión
 (p. ej. *"según el criterio Mercado del Marco de evaluación…"*).
-
----
-
-## Reglas de Google Cloud
-
-Demo sobre tu proyecto de GCP (variable `GOOGLE_CLOUD_PROJECT`). Consume **solo el crédito
-Marketing** (Discovery Engine queda sin usar en esta demo):
-
-| Crédito | Importe | Caduca | Lo consume | En esta demo |
-|---|---|---|---|---|
-| **Marketing AI Agents Challenge** | 433,58 € | **2026-06-25** | Vertex AI · Cloud Run · Cloud Storage | ✅ sí |
-| GenAI App Builder (trial) | 848,21 € | 2027-03-18 | Discovery Engine | ❌ no (no RAG) |
-
-| Tarea | API / endpoint | Cómo |
-|---|---|---|
-| Llamadas a Gemini / agentes | `aiplatform.googleapis.com` | `GOOGLE_GENAI_USE_VERTEXAI=True` + ADK `LlmAgent` |
-| Despliegue | `run.googleapis.com` | `adk deploy cloud_run` (scale-to-zero) |
-
-❌ **Nunca** `import google.generativeai` ni `GOOGLE_API_KEY` (free-tier, no consume
-el crédito). ❌ Nada de LangChain/LlamaIndex/OpenAI como transporte. ❌ Ni Cloud
-Functions ni App Engine. ❌ No crear proyecto nuevo.
 
 ---
 
