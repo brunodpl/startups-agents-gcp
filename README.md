@@ -11,8 +11,10 @@
 **Output:** shortlist diagnosticada (JSON + informe legible) con **citas de los
 frameworks**, expuesta en una URL de Cloud Run.
 
-🔗 **Demo en Cloud Run:** la URL se genera al desplegar — recupérala con `gcloud run services describe startup-diagnostics --region=europe-west1 --format="value(status.url)"` (la UI vive en `/dev-ui/`).
-_(se actualiza con cada fase; scale-to-zero → el primer mensaje arranca en ~5-10 s)_
+🔗 **Demo en Cloud Run:** <https://startup-diagnostics-ktzjduvl6q-ew.a.run.app/dev-ui/>
+_(scale-to-zero → el primer mensaje arranca en ~5-10 s; una corrida completa tarda minutos)._
+Si redespliegas en otro proyecto, recupera la URL con
+`gcloud run services describe startup-diagnostics --region=europe-west1 --format="value(status.url)"`.
 
 ---
 
@@ -39,7 +41,7 @@ _(se actualiza con cada fase; scale-to-zero → el primer mensaje arranca en ~5-
 ```mermaid
 flowchart TD
     TH([Tesis: sector · stage · geografía · señales]) --> DISC
-    DISC[1· Discovery<br/>2 fuentes API pública: YC + GitHub<br/>normaliza · dedup por dominio · cualifica vs tesis (gate binario)] --> SL[(Shortlist · cualificadas)]
+    DISC[1· Discovery<br/>4 fuentes en paralelo: grounding Google Search · prensa ES · YC · GitHub<br/>normaliza · dedup por dominio · cualifica vs tesis (gate binario)] --> SL[(Shortlist · cualificadas)]
     SL --> ANA
     subgraph ANA[2· Analysis · en paralelo por candidata]
       RES[ResearchAgent · fetch_url + resumen]
@@ -53,11 +55,12 @@ flowchart TD
     REP --> OUT([Shortlist diagnosticada con citas → URL Cloud Run])
 ```
 
-- **Discovery**: consulta 2 fuentes públicas gratis vía API (YC OSS + GitHub),
-  normaliza, **deduplica por dominio** y aplica un **gate binario**
-  (`es_candidato`/`no_es_candidato`) a cada candidata contra la tesis.
-  Respeta `robots.txt`/ToS, GDPR-aware; **no** scrapea LinkedIn/Crunchbase ni
-  reconstruye una base tipo Harmonic.
+- **Discovery**: consulta 4 fuentes **en paralelo** — grounding con Google
+  Search (Vertex), prensa/directorios de startups españoles (Firecrawl), YC OSS
+  y GitHub —, normaliza, **deduplica por dominio** (gana grounded → spain → YC)
+  y aplica un **gate binario** (`es_candidato`/`no_es_candidato`) a cada
+  candidata contra la tesis. Respeta `robots.txt`/ToS, GDPR-aware; **no**
+  scrapea LinkedIn/Crunchbase ni reconstruye una base tipo Harmonic.
 - **Analysis**: un agente custom (`PerCandidateAnalysis`) itera las cualificadas
   (hasta `MAX_CANDIDATES`); por
   cada candidata corre `research` y luego los 3 analistas (business/metrics/
