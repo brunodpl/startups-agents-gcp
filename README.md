@@ -1,229 +1,153 @@
-# Diagnóstico 360º de Startups — Pipeline multi-agente (Google ADK + Vertex AI)
+# Agentic Startup Diagnostics
 
-> **Demo para Tales Venture.** Tales Venture (venture studio gallego) hace
-> diagnóstico 360º de startups como servicio core. Esta demo **automatiza ese
-> proceso de punta a punta**: dada una **tesis de inversión**, descubre
-> candidatas en fuentes públicas, las analiza y entrega una **shortlist
-> diagnosticada** con experimentos Lean priorizados — citando los frameworks de
-> evaluación en cada conclusión.
+A reliability-focused multi-agent pipeline built with Google ADK, Vertex AI, and typed Python state.
+It turns an investment thesis into an evidence-backed startup shortlist, runs parallel analysis for each candidate, and produces a diagnosis grounded in versioned evaluation frameworks.
 
-**Input:** una tesis `{sector, stage, geografía, señales}`.
-**Output:** shortlist diagnosticada (JSON + informe legible) con **citas de los
-frameworks**, expuesta en una URL de Cloud Run.
+The repository is a reference implementation and does not advertise a live hosted demo.
+Cloud Run packaging remains available for reproducible deployment.
 
-🔗 **Demo en Cloud Run:** <https://startup-diagnostics-ktzjduvl6q-ew.a.run.app/dev-ui/>
-_(scale-to-zero → el primer mensaje arranca en ~5-10 s; una corrida completa tarda minutos)._
-Si redespliegas en otro proyecto, recupera la URL con
-`gcloud run services describe startup-diagnostics --region=europe-west1 --format="value(status.url)"`.
+## Engineering focus
 
----
+- Explicit context injection from versioned Markdown instead of an unnecessary vector database.
+- Parallel discovery and analysis with typed state between stages.
+- Per-candidate fault isolation so one transient model failure cannot cancel the full run.
+- Bounded candidate counts, timeouts, and source-specific limits to control latency and cost.
+- A four-level evaluation harness covering steps, trajectory, tool calls, and final output.
+- A regression dataset and LLM judge for repeatable quality checks.
+- Structured observability that becomes a no-op outside Cloud Run.
 
-## Estado por fases (v2 — pipeline de 4 etapas)
-
-| Fase | Qué entrega | Estado |
-|------|-------------|--------|
-| **F1** | Scaffold + agente "hello-world" ADK sobre Vertex + **deploy a Cloud Run con URL** | ✅ hecho |
-| **F2** | **Discovery**: agente de sourcing (YC OSS) → shortlist cualificada vs tesis (gate binario) | ✅ hecho |
-| **F3** | **Analysis** (research/business/metrics/market) + **Diagnosis** (frameworks en contexto + citación) | ✅ hecho |
-| **F4** | **Presentation** (informe rankeado) + 2ª fuente (GitHub) con dedupe por dominio | ✅ hecho |
-| **F5** | Harness de evals (4 niveles + LLM-judge) + dataset de regresión + docs | ✅ hecho |
-
-> El `ResearchAgent` + tool `fetch_url` son un **componente de Analysis (F3)**,
-> no una fase aparte: dentro del pipeline leen la candidata de `state` y escriben
-> su resumen en `state["research"]`.
-> Filosofía: **mínimo que funcione, desplegado pronto**. Una URL que funciona >
-> la perfección.
-
----
-
-## Arquitectura — pipeline de 4 etapas
+## System flow
 
 ```mermaid
 flowchart TD
-    classDef flash fill:#4285F4,stroke:#1a56db,color:#fff
-    classDef pro fill:#0F9D58,stroke:#05653a,color:#fff
-    classDef io fill:#805ad5,stroke:#553c9a,color:#fff
+    IN[Investment thesis] --> DISCOVERY
 
-    IN(["Investment Thesis\nsector, stage, geography, signals"]):::io
-
-    DA["discovery_agent  Gemini Flash\nQueries 4 sources in parallel: Vertex Search,\nFirecrawl press, YC OSS API, GitHub Topics\nDedupe by domain, binary gate → shortlist"]:::flash
-
-    subgraph LOOP["Per-Candidate Loop  (up to MAX_CANDIDATES)"]
-        RA["research_agent  Gemini Flash\nFetches and summarises the candidate website\nvia Firecrawl, 20k char cap"]:::flash
-
-        subgraph PAR["ParallelAgent — 3 analysts run simultaneously"]
-            BM["business_model_agent  Flash\nValue prop, revenue model, segment"]:::flash
-            ME["metrics_agent  Flash\nTraction signals, unit economics"]:::flash
-            MK["market_agent  Flash\nMarket size, competition, timing"]:::flash
-        end
-
-        SY["synthesizer_agent  Gemini Pro 3.1\nCombines all 3 analyses with knowledge/ in-context\neval_framework.md + lean_growth.md, no RAG\nVerdict with explicit framework citations"]:::pro
+    subgraph DISCOVERY[Parallel discovery]
+        GS[Google Search grounding]
+        FC[Firecrawl sources]
+        YC[YC OSS]
+        GH[GitHub topics]
     end
 
-    RE["reporting_agent  Gemini Flash\nReads all N diagnoses, ranks by score\nBuilds final report with citas de frameworks"]:::flash
+    DISCOVERY --> DEDUPE[Normalize, deduplicate, and qualify]
+    DEDUPE --> LOOP[Per-candidate analysis]
 
-    OUT(["Ranked Startup Report\nFortalezas, Riesgos, Palancas, Experimentos, Citas"]):::io
+    subgraph LOOP[Fault-isolated candidate loop]
+        RESEARCH[Research agent]
+        RESEARCH --> BUSINESS[Business model analyst]
+        RESEARCH --> METRICS[Metrics analyst]
+        RESEARCH --> MARKET[Market analyst]
+        BUSINESS --> SYNTH[Synthesizer]
+        METRICS --> SYNTH
+        MARKET --> SYNTH
+    end
 
-    IN --> DA
-    DA -->|"qualified shortlist"| RA
-    RA --> BM
-    RA --> ME
-    RA --> MK
-    BM --> SY
-    ME --> SY
-    MK --> SY
-    SY -->|"accumulated diagnoses"| RE
-    RE --> OUT
+    SYNTH --> REPORT[Ranked report]
+    REPORT --> EVALS[Four-level eval harness]
 ```
 
-- **Discovery**: consulta 4 fuentes **en paralelo** — grounding con Google
-  Search (Vertex), prensa/directorios de startups españoles (Firecrawl), YC OSS
-  y GitHub —, normaliza, **deduplica por dominio** (gana grounded → spain → YC)
-  y aplica un **gate binario** (`es_candidato`/`no_es_candidato`) a cada
-  candidata contra la tesis. Respeta `robots.txt`/ToS, GDPR-aware; **no**
-  scrapea LinkedIn/Crunchbase ni reconstruye una base tipo Harmonic.
-- **Analysis**: un agente custom (`PerCandidateAnalysis`) itera las cualificadas
-  (hasta `MAX_CANDIDATES`); por
-  cada candidata corre `research` y luego los 3 analistas (business/metrics/
-  market) **en paralelo** (research primero porque los analistas leen `{research}`).
-- **Diagnosis**: `gemini-3.1-pro-preview`, **grounded en los frameworks en contexto**,
-  citando de qué framework sale cada conclusión.
-- **Presentation**: informe rankeado (JSON + legible).
-- Detalle en [docs/architecture.md](docs/architecture.md).
+Discovery runs multiple sources concurrently and normalizes results into typed candidate records.
+The custom per-candidate loop performs research first, then runs three analysts in parallel because every analyst depends on the same research state.
+The synthesizer combines those outputs with the evaluation frameworks loaded into context.
+The reporting agent ranks the accumulated diagnoses and produces the final result.
 
----
+See [docs/architecture.md](docs/architecture.md) for the detailed state flow and operational tradeoffs.
 
-## Conocimiento = frameworks EN CONTEXTO (no RAG)
+## Context architecture
 
-Decisión cerrada: el corpus de frameworks es pequeño y estático → se leen de
-`knowledge/*.md` y se **inyectan en el `instruction`** de los agentes de Diagnosis
-(y Analysis si aplica). **Sin** vector DB, embeddings, Vertex AI Search ni Skills.
-Si el corpus crece en el futuro → migrar a Vertex AI Search (fuera de esta demo).
+The framework corpus is small, static, and versioned under `knowledge/`.
+The loader reads those files and injects them into the relevant agent instructions.
 
-**Auditabilidad por prompting:** el agente cita el framework de cada conclusión
-(p. ej. *"según el criterio Mercado del Marco de evaluación…"*).
+This choice keeps the context inspectable and removes the cost and operational surface of embeddings, a vector database, and a retrieval service.
+The agents must cite the framework behind each conclusion, which makes the reasoning easier to audit.
 
----
+If the corpus becomes large or changes frequently, the architecture documents identify managed retrieval as the migration point.
+It is not part of this implementation.
 
-## Estructura del repo
+## Reliability and recovery
 
-```
-startups-agents-gcp/
-├── agents/                  # paquete ADK desplegable (el "app")
-│   ├── agent.py             # root_agent = build_pipeline()
-│   ├── pipeline.py          # SequentialAgent + PerCandidateAnalysis (BaseAgent custom)
-│   ├── config.py            # Settings: routing Vertex, modelos, MAX_CANDIDATES, keys
-│   ├── prompts.py           # instrucciones de cada agente
-│   ├── schemas.py           # pydantic: Thesis · Candidate · Shortlist · Report
-│   ├── knowledge.py         # loader: knowledge/*.md → str para el instruction
-│   ├── requirements.txt     # ⚠️ deps del contenedor Cloud Run (NO el pyproject)
-│   ├── sub_agents/          # discovery · research · business_model · metrics · market · diagnosis · reporting
-│   └── tools/               # fetch_url · yc_source · gh_source · sources (find_candidates + dedupe)
-├── knowledge/               # frameworks .md inyectados en contexto (no RAG)
-│   ├── evaluation_framework.md
-│   └── lean_growth.md
-├── evals/                   # F5: harness de 4 niveles · `python -m evals.run`
-│   ├── levels.py            # lógica de los 4 niveles (pura, testeable)
-│   ├── run.py               # captura una corrida + LLM-judge (Vertex)
-│   └── datasets/            # regression.jsonl (4 tesis + criterios esperados)
-├── tests/                   # pytest (unit + wiring)
-├── docs/architecture.md     # detalle técnico + decisiones
-├── .env.example
-└── pyproject.toml
+The pipeline treats partial progress as useful state.
+A failure while analysing one candidate is captured for that candidate and does not discard completed work for the rest of the shortlist.
+
+The repository includes a regression for a production-like transient `429 RESOURCE_EXHAUSTED` failure.
+The test verifies that a single candidate failure cannot collapse the whole task group.
+
+Other safeguards include:
+
+- Explicit maximum candidate counts.
+- Source normalization and deduplication by domain.
+- Timeouts around remote work.
+- Checkpoint-friendly typed state between phases.
+- Errors represented in results instead of hidden behind empty output.
+- No-op telemetry outside the managed runtime.
+
+## Evaluation harness
+
+One captured run is evaluated at four levels:
+
+1. Step evaluation verifies that each expected stage produced non-empty output without recorded errors.
+2. Trajectory evaluation verifies the expected discovery, research, analysis, synthesis, and reporting sequence.
+3. Tool evaluation verifies that discovery was called and that fetched URLs came from candidate state instead of hardcoded arguments.
+4. Final-output evaluation checks framework grounding and expected criteria with an LLM judge.
+
+The regression dataset lives at `evals/datasets/regression.jsonl`.
+It contains four investment theses with expected criteria.
+
+```bash
+uv run python -m evals.run
+uv run python -m evals.run --all
 ```
 
----
+The live eval runner uses Vertex AI and configured sources, so it consumes external services.
+The pure level logic is covered by offline tests.
 
-## Puesta en marcha (local)
+## Repository layout
 
-Requisitos: Python 3.13, [uv](https://docs.astral.sh/uv/), `gcloud` con ADC
-(`gcloud auth application-default login`) sobre tu proyecto de GCP.
+```text
+agents/                  Google ADK application and typed pipeline state
+agents/sub_agents/       Discovery, research, analyst, synthesis, and reporting agents
+agents/tools/            Source and content tools
+knowledge/               Versioned evaluation and Lean/Growth frameworks
+evals/                   Capture, four-level evaluation, judge, and regression dataset
+tests/                   Offline unit, wiring, state, and failure-isolation tests
+docs/architecture.md     Architecture decisions and operational limits
+scripts/deploy.ps1       Cloud Run preflight and deployment script
+```
+
+## Local development
+
+Requirements are Python 3.13, [uv](https://docs.astral.sh/uv/), and Google Cloud Application Default Credentials for live Vertex AI calls.
 
 ```bash
 uv sync
-cp .env.example .env          # rellena las keys (Vertex no necesita; las fuentes sí)
-
-# ⚠️ Windows Application Control (WDAC) bloquea los .exe de .venv\Scripts
-# (adk.exe, pytest.exe). Invoca SIEMPRE como módulo de Python:
+cp .env.example .env
 uv run python -m pytest -q
-uv run python -m google.adk.cli web agents      # UI local en http://localhost:8000
+uv run python -m google.adk.cli web agents
 ```
 
-## Despliegue (Cloud Run)
+The offline suite does not require Vertex AI or source API keys.
+The current baseline is 76 passing tests.
+
+## Cloud Run packaging
+
+The repository includes deployment configuration for Cloud Run in `europe-west1` with scale-to-zero, explicit memory, and an extended request timeout.
+The Firecrawl secret is expected through Secret Manager rather than plaintext environment configuration.
 
 ```bash
-# Exporta el proyecto y la key, y usa el script (preflight + tests + Secret Manager):
-export GOOGLE_CLOUD_PROJECT=tu-proyecto-gcp
-export FIRECRAWL_API_KEY=fc-...
+export GOOGLE_CLOUD_PROJECT=your-project-id
 pwsh ./scripts/deploy.ps1
-
-# Equivalente manual (la key va por Secret Manager, no en texto plano):
-uv run python -m google.adk.cli deploy cloud_run \
-  --project=$GOOGLE_CLOUD_PROJECT --region=europe-west1 \
-  --service_name=startup-diagnostics --with_ui agents \
-  -- --allow-unauthenticated --memory=2Gi --timeout=900 \
-     --update-env-vars=GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT,GOOGLE_CLOUD_LOCATION=global \
-     --set-secrets=FIRECRAWL_API_KEY=firecrawl-api-key:latest
 ```
 
-- ⚠️ **Las dependencias del contenedor salen de `agents/requirements.txt`**, NO
-  del `pyproject.toml`. Si un paquete que importa el agente no está ahí, el
-  contenedor arranca pero `/run` devuelve 500 (`ModuleNotFoundError`).
-- ⚠️ **`--memory=2Gi` y `--timeout=900` son obligatorios.** Con los 512Mi por
-  defecto, una corrida completa (varias candidatas, analistas en paralelo) **se
-  queda sin memoria (OOM)** y el contenedor corta la conexión a mitad; los 300s
-  por defecto se quedan cortos para el pipeline síncrono (una candidata cuesta
-  ~70s; `MAX_CANDIDATES=5` por defecto).
-- **Scale-to-zero** por defecto. `--with_ui` = URL clicable. `--allow-unauthenticated`
-  = pública (demo). Región `europe-west1` (EU/GDPR).
-  ⚠️ Pública sin auth: cualquiera puede lanzar el pipeline (consume crédito) y, en
-  una instancia caliente, leer sesiones de otros vía la API de ADK. Aceptable solo
-  para una demo desechable — **borra el servicio tras el evento**
-  (`gcloud run services delete startup-diagnostics --region=europe-west1`).
-- La `FIRECRAWL_API_KEY` se guarda en **Secret Manager** y el servicio la lee con
-  `--set-secrets` (nunca como env var en texto plano ni en el repo).
+No public service URL is maintained from this repository.
+Unauthenticated deployment is suitable only for a disposable demonstration because a caller can consume model credit and inspect shared runtime sessions.
+A real product should add authentication, tenant isolation, asynchronous jobs, and per-user quotas.
 
----
+## Known limits
 
-## Harness de evals (el diferenciador) — F5
+- The pipeline is synchronous and is not intended for large candidate sets.
+- Live discovery is non-deterministic, so exact tool trajectories are unsuitable as the only regression signal.
+- The custom final-output judge does not replace a full grounding or hallucination evaluator.
+- A production version should add replay fixtures, stronger rubric evaluation, asynchronous execution, and durable managed state.
+- The source adapters depend on external APIs and must surface coverage degradation when those APIs change.
 
-Calidad **medible** en 4 niveles (una corrida del pipeline, evaluada 4 veces):
-1. **Paso individual** — ¿cada etapa produjo salida no vacía, sin errores?
-2. **Trayectoria** — discovery → research → analistas → synthesizer → reporting.
-3. **Llamada a herramientas** — `find_candidates` se llamó; y la URL de `fetch_url`
-   **viene de una candidata en `state`** (no hardcodeada) → valida el flujo F3.
-4. **Salida final** — el informe **cita frameworks reales** (de `knowledge/`) y
-   cubre los criterios esperados (**LLM-as-judge** sobre Vertex).
-
-Más un **dataset de regresión** (`evals/datasets/regression.jsonl`: 4 tesis con
-criterios esperados) y `python -m evals.run` → informe por nivel + fallos
-concretos (`--all` para todo el dataset).
-
-```bash
-uv run python -m evals.run          # primera tesis
-uv run python -m evals.run --all    # dataset completo (más lento / más crédito)
-```
-
----
-
-## Guion de demo (2 min)
-
-1. **(15s)** "Tales Venture diagnostica startups 360º a mano. Esto lo automatiza
-   end-to-end: de una tesis a una shortlist diagnosticada."
-2. **(20s)** Abrir la URL → introducir la tesis de ejemplo.
-3. **(40s)** Ver el pipeline: Discovery (sourcing) → Analysis (en paralelo) →
-   Diagnosis (grounded en frameworks) → Presentation (informe rankeado).
-4. **(25s)** Mostrar el informe del top 3 **con citas de frameworks** y experimentos Lean.
-5. **(20s)** Enseñar el harness de evals: "no es humo, es medible — 4 niveles + dataset de regresión."
-
----
-
-## Notas de proyecto
-
-- **El sistema es para Tales Venture**: la tesis, las fuentes y los frameworks son
-  *inputs configurables del cliente*, no asunciones. Preguntas de descubrimiento y
-  dónde enchufa cada respuesta: [docs/preguntas-tales-venture.md](docs/preguntas-tales-venture.md).
-- Prototipo sobre el proyecto GCP **personal** del autor. Si avanza a startup real,
-  la producción se mueve a la cuenta cloud de esa startup.
-- Región EU por GDPR; Discovery respeta robots.txt/ToS y es consciente de datos de founders.
-- Código custom, type hints, funciones pequeñas, errores explícitos, secretos en `.env`.
+These constraints are documented because they define the boundary between a strong reference implementation and a production agent platform.
